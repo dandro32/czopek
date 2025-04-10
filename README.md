@@ -6,7 +6,7 @@ Backend API do komunikacji z ChatGPT, zabezpieczony tokenem Bearer.
 
 - Python 3.8+
 - OpenAI API key
-- API Token (do autoryzacji żądań)
+- Klucz sekretny do generowania tokenów JWT
 
 ## Instalacja
 
@@ -32,18 +32,18 @@ venv\Scripts\activate  # dla Windows
 pip install -r requirements.txt
 ```
 
-4. Skopiuj `.env.example` do `.env` i uzupełnij zmienne środowiskowe:
+4. Skopiuj `.env.example` do `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-## Konfiguracja
-
-W pliku `.env` ustaw następujące zmienne:
-
-- `OPENAI_API_KEY` - klucz API do OpenAI
-- `API_TOKEN` - token do autoryzacji żądań
+5. Skonfiguruj zmienne środowiskowe w pliku `.env`:
+   - `OPENAI_API_KEY` - twój klucz API do OpenAI
+   - `SECRET_KEY` - wygeneruj bezpieczny klucz sekretny używając komendy:
+     ```bash
+     openssl rand -hex 32
+     ```
 
 ## Uruchomienie
 
@@ -55,11 +55,42 @@ Serwer będzie dostępny pod adresem `http://localhost:8000`
 
 ## Endpointy
 
+### POST /register
+
+Rejestracja nowego użytkownika.
+
+```json
+{
+  "email": "user@example.com",
+  "username": "username",
+  "password": "password123"
+}
+```
+
+### POST /login
+
+Logowanie użytkownika. Zwraca access token i refresh token.
+
+```json
+{
+  "username": "username",
+  "password": "password123"
+}
+```
+
+### POST /refresh
+
+Odświeżanie tokenu dostępu.
+
+```json
+{
+  "refresh_token": "your_refresh_token"
+}
+```
+
 ### POST /chat
 
-Endpoint do komunikacji z ChatGPT. Wymaga autoryzacji Bearer Token.
-
-Przykładowe żądanie:
+Endpoint do komunikacji z ChatGPT. Wymaga tokenu dostępu w nagłówku Authorization.
 
 ```json
 {
