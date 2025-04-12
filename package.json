@@ -14,7 +14,7 @@
     "backend:kill-port": "lsof -ti:8000 | xargs kill -9",
     "mobile:kill-port": "lsof -ti:8081 | xargs kill -9",
     "dev:clean": "yarn backend:kill-port || true && yarn mobile:kill-port || true",
-    "dev": "yarn dev:clean && concurrently \"yarn backend:dev\" \"yarn mobile:start\"",
+    "dev": "yarn dev:clean && concurrently \"yarn backend:dev\" \"yarn mobile:android\"",
     "clean:mobile": "rm -rf packages/mobile/* packages/mobile/.* 2>/dev/null || true",
     "setup": "yarn install && yarn backend:install && yarn clean:mobile && cd packages/mobile && npx create-expo-app@latest . -t expo-template-blank-typescript"
   },
