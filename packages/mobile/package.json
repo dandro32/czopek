@@ -1,40 +1,23 @@
 {
-  "name": "@czopek/mobile",
+  "name": "mobile",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "test": "jest",
-    "lint": "eslint .",
-    "postinstall": "expo-yarn-workspaces postinstall"
+    "web": "expo start --web"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "1.23.1",
-    "@react-navigation/native": "^6.1.9",
-    "@react-navigation/native-stack": "^6.9.17",
-    "@reduxjs/toolkit": "^2.0.1",
-    "axios": "^1.6.2",
-    "expo": "~52.0.0",
+    "expo": "~52.0.43",
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
-    "react-native": "0.76.9",
-    "react-native-safe-area-context": "4.12.0",
-    "react-native-screens": "~4.4.0",
-    "react-redux": "^9.0.4"
+    "react-native": "0.76.9"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
+    "@babel/core": "^7.25.2",
     "@types/react": "~18.3.12",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "babel-plugin-module-resolver": "^5.0.0",
-    "eslint": "^8.19.0",
-    "expo-yarn-workspaces": "^2.3.1",
-    "jest": "^29.2.1",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.3"
   },
   "private": true
 }
