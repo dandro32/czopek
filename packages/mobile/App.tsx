@@ -2,9 +2,17 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ThemeProvider, Text, Input, Button, Icon } from '@rneui/themed';
-import { useState } from 'react';
+import {
+  ThemeProvider,
+  Text,
+  Input,
+  Button,
+  Icon,
+  Switch,
+} from '@rneui/themed';
+import { useState, useCallback } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { lightTheme, darkTheme } from './src/theme';
 
 type RootStackParamList = {
   Home: undefined;
@@ -88,8 +96,25 @@ function TodoListScreen() {
 }
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode(!isDarkMode);
+  }, [isDarkMode]);
+
+  const headerRight = useCallback(() => {
+    return (
+      <Switch
+        value={isDarkMode}
+        onValueChange={toggleTheme}
+        color={isDarkMode ? '#80cbc4' : '#2196f3'}
+        style={{ marginRight: 10 }}
+      />
+    );
+  }, [isDarkMode, toggleTheme]);
+
   return (
-    <ThemeProvider>
+    <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
       <NavigationContainer>
         <Stack.Navigator>
           <Stack.Screen
@@ -98,12 +123,13 @@ export default function App() {
             options={{
               title: 'Czopek',
               headerStyle: {
-                backgroundColor: '#6200ee',
+                backgroundColor: isDarkMode ? '#80cbc4' : '#2196f3',
               },
               headerTintColor: '#fff',
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight,
             }}
           />
           <Stack.Screen
@@ -112,12 +138,13 @@ export default function App() {
             options={{
               title: 'Lista zadań',
               headerStyle: {
-                backgroundColor: '#6200ee',
+                backgroundColor: isDarkMode ? '#80cbc4' : '#2196f3',
               },
               headerTintColor: '#fff',
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
+              headerRight,
             }}
           />
         </Stack.Navigator>
