@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import Boolean, Column, Integer, String
 from database import Base
+from sqlalchemy.orm import relationship
 
 class DBUser(Base):
     __tablename__ = "users"
@@ -10,6 +11,9 @@ class DBUser(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
+
+    tasks = relationship("DBTask", back_populates="user")
+    calendar_credentials = relationship("CalendarCredentials", back_populates="user")
 
 class UserBase(BaseModel):
     email: EmailStr
