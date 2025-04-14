@@ -14,6 +14,7 @@ import {
 } from '@rneui/themed';
 import { useState, useCallback, useEffect } from 'react';
 import { lightTheme, darkTheme } from './src/theme';
+import { RecordingModal } from './src/components/RecordingModal';
 
 type RootStackParamList = {
   Home: undefined;
@@ -27,6 +28,7 @@ type Props = {
 function HomeScreen({ navigation }: Props) {
   const [prompt, setPrompt] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isWhisperModalVisible, setIsWhisperModalVisible] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -77,6 +79,34 @@ function HomeScreen({ navigation }: Props) {
     }
   };
 
+  const handleWhisperRecord = async (audioUri: string) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
+
+      const response = await fetch('http://localhost:8000/whisper/transcribe', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const data = await response.json();
+      if (data.text) {
+        setPrompt(data.text);
+      }
+    } catch (error) {
+      console.error('Błąd podczas wysyłania nagrania:', error);
+    } finally {
+      setIsWhisperModalVisible(false);
+    }
+  };
+
   const handleSendMessage = () => {
     if (prompt.trim()) {
       console.log('Wysyłanie wiadomości:', prompt);
@@ -118,13 +148,22 @@ function HomeScreen({ navigation }: Props) {
             ]}
             placeholderTextColor={theme.colors.grey3}
           />
-          <Icon
-            name={isRecording ? 'mic-off' : 'mic'}
-            type="material"
-            color={isRecording ? theme.colors.error : theme.colors.primary}
-            onPress={handleVoiceRecord}
-            containerStyle={styles.inputIcon}
-          />
+          <View style={styles.inputIcons}>
+            <Icon
+              name={isRecording ? 'mic-off' : 'mic'}
+              type="material"
+              color={isRecording ? theme.colors.error : theme.colors.primary}
+              onPress={handleVoiceRecord}
+              containerStyle={styles.icon}
+            />
+            <Icon
+              name="record-voice-over"
+              type="material"
+              color={theme.colors.secondary}
+              onPress={() => setIsWhisperModalVisible(true)}
+              containerStyle={styles.icon}
+            />
+          </View>
         </View>
         <Button
           title="Wyślij"
@@ -149,6 +188,20 @@ function HomeScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.buttonContainer}>
+        <Button
+          title="Nagraj polecenie"
+          icon={{
+            name: 'record-voice-over',
+            type: 'material',
+            color: theme.colors.white,
+          }}
+          buttonStyle={[
+            styles.button,
+            { backgroundColor: theme.colors.success },
+          ]}
+          onPress={() => setIsWhisperModalVisible(true)}
+        />
+
         <Button
           title="Dodaj zadanie"
           icon={{
@@ -177,6 +230,13 @@ function HomeScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('TodoList')}
         />
       </View>
+
+      <RecordingModal
+        isVisible={isWhisperModalVisible}
+        onClose={() => setIsWhisperModalVisible(false)}
+        onSend={handleWhisperRecord}
+      />
+
       <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
     </View>
   );
@@ -319,15 +379,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 10,
     padding: 15,
-    paddingRight: 50,
+    paddingRight: 90,
     fontSize: 16,
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  inputIcon: {
+  inputIcons: {
     position: 'absolute',
     right: 10,
     top: 10,
+    flexDirection: 'row',
+  },
+  icon: {
+    marginLeft: 10,
   },
   sendButton: {
     borderRadius: 10,
