@@ -9,6 +9,7 @@ import {
   Button,
   Icon,
   Switch,
+  useTheme,
 } from '@rneui/themed';
 import { useState, useCallback } from 'react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -30,14 +31,23 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function HomeScreen({ navigation }: HomeScreenProps) {
   const [prompt, setPrompt] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const { theme } = useTheme();
 
   const handleVoiceRecord = () => {
     setIsRecording(!isRecording);
   };
 
   return (
-    <View style={styles.container}>
-      <Text h1 style={styles.title}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor:
+            theme.mode === 'dark' ? theme.colors.black : theme.colors.white,
+        },
+      ]}
+    >
+      <Text h1 style={[styles.title, { color: theme.colors.primary }]}>
         Czopek - mój cudowny asystent
       </Text>
 
@@ -48,11 +58,20 @@ function HomeScreen({ navigation }: HomeScreenProps) {
           onChangeText={setPrompt}
           multiline
           numberOfLines={3}
+          style={{
+            color:
+              theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
+          }}
+          inputStyle={{
+            color:
+              theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
+          }}
+          placeholderTextColor={theme.colors.grey3}
           rightIcon={
             <Icon
               name={isRecording ? 'mic-off' : 'mic'}
               type="material"
-              color={isRecording ? '#ff0000' : '#6200ee'}
+              color={isRecording ? theme.colors.error : theme.colors.primary}
               onPress={handleVoiceRecord}
             />
           }
@@ -65,9 +84,12 @@ function HomeScreen({ navigation }: HomeScreenProps) {
           icon={{
             name: 'add-task',
             type: 'material',
-            color: 'white',
+            color: theme.colors.white,
           }}
-          buttonStyle={styles.button}
+          buttonStyle={[
+            styles.button,
+            { backgroundColor: theme.colors.primary },
+          ]}
           onPress={() => {}}
         />
 
@@ -76,21 +98,36 @@ function HomeScreen({ navigation }: HomeScreenProps) {
           icon={{
             name: 'list',
             type: 'material',
-            color: 'white',
+            color: theme.colors.white,
           }}
-          buttonStyle={[styles.button, styles.listButton]}
+          buttonStyle={[
+            styles.button,
+            { backgroundColor: theme.colors.secondary },
+          ]}
           onPress={() => navigation.navigate('TodoList')}
         />
       </View>
-      <StatusBar style="auto" />
+      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
     </View>
   );
 }
 
 function TodoListScreen() {
+  const { theme } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Text h2>Lista zadań</Text>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor:
+            theme.mode === 'dark' ? theme.colors.black : theme.colors.white,
+        },
+      ]}
+    >
+      <Text h2 style={{ color: theme.colors.primary }}>
+        Lista zadań
+      </Text>
     </View>
   );
 }
@@ -107,11 +144,24 @@ export default function App() {
       <Switch
         value={isDarkMode}
         onValueChange={toggleTheme}
-        color={isDarkMode ? '#80cbc4' : '#2196f3'}
+        color={
+          isDarkMode
+            ? darkTheme.darkColors?.secondary
+            : lightTheme.lightColors?.primary
+        }
         style={{ marginRight: 10 }}
       />
     );
-  }, [isDarkMode, toggleTheme]);
+  }, [isDarkMode]);
+
+  const getHeaderStyle = useCallback(
+    () => ({
+      backgroundColor: isDarkMode
+        ? darkTheme.darkColors?.secondary
+        : lightTheme.lightColors?.primary,
+    }),
+    [isDarkMode]
+  );
 
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
@@ -122,9 +172,7 @@ export default function App() {
             component={HomeScreen}
             options={{
               title: 'Czopek',
-              headerStyle: {
-                backgroundColor: isDarkMode ? '#80cbc4' : '#2196f3',
-              },
+              headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
               headerTitleStyle: {
                 fontWeight: 'bold',
@@ -137,9 +185,7 @@ export default function App() {
             component={TodoListScreen}
             options={{
               title: 'Lista zadań',
-              headerStyle: {
-                backgroundColor: isDarkMode ? '#80cbc4' : '#2196f3',
-              },
+              headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
               headerTitleStyle: {
                 fontWeight: 'bold',
@@ -156,12 +202,10 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     padding: 20,
   },
   title: {
     textAlign: 'center',
-    color: '#6200ee',
     marginBottom: 40,
     fontSize: 28,
   },
@@ -172,11 +216,7 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   button: {
-    backgroundColor: '#6200ee',
     borderRadius: 10,
     paddingVertical: 15,
-  },
-  listButton: {
-    backgroundColor: '#03dac6',
   },
 });
