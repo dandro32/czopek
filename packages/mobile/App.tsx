@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, TextInput } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Voice from '@react-native-voice/voice';
 import {
   ThemeProvider,
   Text,
@@ -11,7 +12,7 @@ import {
   Switch,
   useTheme,
 } from '@rneui/themed';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { lightTheme, darkTheme } from './src/theme';
 
 type RootStackParamList = {
@@ -28,8 +29,52 @@ function HomeScreen({ navigation }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const { theme } = useTheme();
 
-  const handleVoiceRecord = () => {
-    setIsRecording(!isRecording);
+  useEffect(() => {
+    const voiceStartHandler = () => {
+      console.log('Rozpoczęto nagrywanie');
+      setIsRecording(true);
+    };
+    const voiceEndHandler = () => {
+      console.log('Zakończono nagrywanie');
+      setIsRecording(false);
+    };
+    const voiceResultsHandler = (e: any) => {
+      console.log('Otrzymano wyniki:', e.value);
+      if (e.value && e.value[0]) {
+        console.log('Ustawiam tekst:', e.value[0]);
+        setPrompt(e.value[0]);
+      }
+    };
+    const voiceErrorHandler = (e: any) => {
+      console.error('Błąd rozpoznawania mowy:', e);
+      setIsRecording(false);
+    };
+
+    Voice.onSpeechStart = voiceStartHandler;
+    Voice.onSpeechEnd = voiceEndHandler;
+    Voice.onSpeechResults = voiceResultsHandler;
+    Voice.onSpeechError = voiceErrorHandler;
+
+    return () => {
+      Voice.destroy().then(() => {
+        Voice.removeAllListeners();
+      });
+    };
+  }, []);
+
+  const handleVoiceRecord = async () => {
+    try {
+      if (isRecording) {
+        console.log('Zatrzymuję nagrywanie');
+        await Voice.stop();
+      } else {
+        console.log('Rozpoczynam nagrywanie');
+        await Voice.start('pl-PL');
+      }
+    } catch (error) {
+      console.error('Błąd podczas obsługi nagrywania:', error);
+      setIsRecording(false);
+    }
   };
 
   const handleSendMessage = () => {
