@@ -1,18 +1,17 @@
+import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, TextInput } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   ThemeProvider,
   Text,
-  Input,
   Button,
   Icon,
   Switch,
   useTheme,
 } from '@rneui/themed';
 import { useState, useCallback } from 'react';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { lightTheme, darkTheme } from './src/theme';
 
 type RootStackParamList = {
@@ -20,21 +19,24 @@ type RootStackParamList = {
   TodoList: undefined;
 };
 
-type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
-type TodoListScreenProps = NativeStackScreenProps<
-  RootStackParamList,
-  'TodoList'
->;
+type Props = {
+  navigation: any;
+};
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
-
-function HomeScreen({ navigation }: HomeScreenProps) {
+function HomeScreen({ navigation }: Props) {
   const [prompt, setPrompt] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const { theme } = useTheme();
 
   const handleVoiceRecord = () => {
     setIsRecording(!isRecording);
+  };
+
+  const handleSendMessage = () => {
+    if (prompt.trim()) {
+      console.log('Wysyłanie wiadomości:', prompt);
+      setPrompt('');
+    }
   };
 
   return (
@@ -52,29 +54,52 @@ function HomeScreen({ navigation }: HomeScreenProps) {
       </Text>
 
       <View style={styles.inputContainer}>
-        <Input
-          placeholder="Wpisz wiadomość do asystenta..."
-          value={prompt}
-          onChangeText={setPrompt}
-          multiline
-          numberOfLines={3}
-          style={{
-            color:
-              theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
+        <View style={styles.inputWrapper}>
+          <TextInput
+            placeholder="Wpisz wiadomość do asystenta..."
+            value={prompt}
+            onChangeText={setPrompt}
+            multiline
+            numberOfLines={3}
+            style={[
+              styles.input,
+              {
+                color:
+                  theme.mode === 'dark'
+                    ? theme.colors.white
+                    : theme.colors.black,
+                borderColor: theme.colors.grey3,
+              },
+            ]}
+            placeholderTextColor={theme.colors.grey3}
+          />
+          <Icon
+            name={isRecording ? 'mic-off' : 'mic'}
+            type="material"
+            color={isRecording ? theme.colors.error : theme.colors.primary}
+            onPress={handleVoiceRecord}
+            containerStyle={styles.inputIcon}
+          />
+        </View>
+        <Button
+          title="Wyślij"
+          icon={{
+            name: 'send',
+            type: 'material',
+            color: theme.colors.white,
+            size: 20,
           }}
-          inputStyle={{
-            color:
-              theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
-          }}
-          placeholderTextColor={theme.colors.grey3}
-          rightIcon={
-            <Icon
-              name={isRecording ? 'mic-off' : 'mic'}
-              type="material"
-              color={isRecording ? theme.colors.error : theme.colors.primary}
-              onPress={handleVoiceRecord}
-            />
-          }
+          iconRight
+          buttonStyle={[
+            styles.sendButton,
+            {
+              backgroundColor: prompt.trim()
+                ? theme.colors.primary
+                : theme.colors.grey3,
+            },
+          ]}
+          onPress={handleSendMessage}
+          disabled={!prompt.trim()}
         />
       </View>
 
@@ -132,8 +157,11 @@ function TodoListScreen() {
   );
 }
 
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
 
   const toggleTheme = useCallback(() => {
     setIsDarkMode(!isDarkMode);
@@ -163,6 +191,11 @@ export default function App() {
     [isDarkMode]
   );
 
+  const navigateToHome = useCallback((navigation: any) => {
+    navigation.navigate('Home');
+    setIsMenuVisible(false);
+  }, []);
+
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
       <NavigationContainer>
@@ -170,7 +203,7 @@ export default function App() {
           <Stack.Screen
             name="Home"
             component={HomeScreen}
-            options={{
+            options={({ navigation }) => ({
               title: 'Czopek',
               headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
@@ -178,12 +211,22 @@ export default function App() {
                 fontWeight: 'bold',
               },
               headerRight,
-            }}
+              headerLeft: () => (
+                <Icon
+                  name="home"
+                  type="material"
+                  color="#fff"
+                  size={28}
+                  containerStyle={{ marginLeft: 10 }}
+                  onPress={() => navigateToHome(navigation)}
+                />
+              ),
+            })}
           />
           <Stack.Screen
             name="TodoList"
             component={TodoListScreen}
-            options={{
+            options={({ navigation }) => ({
               title: 'Lista zadań',
               headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
@@ -191,7 +234,17 @@ export default function App() {
                 fontWeight: 'bold',
               },
               headerRight,
-            }}
+              headerLeft: () => (
+                <Icon
+                  name="home"
+                  type="material"
+                  color="#fff"
+                  size={28}
+                  containerStyle={{ marginLeft: 10 }}
+                  onPress={() => navigateToHome(navigation)}
+                />
+              ),
+            })}
           />
         </Stack.Navigator>
       </NavigationContainer>
@@ -211,6 +264,29 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: 30,
+  },
+  inputWrapper: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 15,
+    paddingRight: 50,
+    fontSize: 16,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  inputIcon: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
+  sendButton: {
+    borderRadius: 10,
+    paddingVertical: 12,
   },
   buttonContainer: {
     gap: 15,
