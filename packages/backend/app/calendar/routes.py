@@ -133,4 +133,12 @@ async def get_events_rag_context(db: Session = Depends(get_db), current_user: DB
     
     events = get_upcoming_events(service)
     context = event_to_rag_context(events)
-    return {"context": context} 
+    return {"context": context}
+
+@router.get("/status")
+async def get_calendar_status(db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
+    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == current_user.id).first()
+    return {
+        "is_authorized": creds is not None,
+        "expiry": creds.token_expiry.isoformat() if creds else None
+    } 
