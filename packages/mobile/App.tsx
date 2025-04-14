@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, TextInput } from 'react-native';
+import { StyleSheet, View, TextInput, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Voice from '@react-native-voice/voice';
@@ -15,6 +15,13 @@ import {
 import { useState, useCallback, useEffect } from 'react';
 import { lightTheme, darkTheme } from './src/theme';
 import { RecordingModal } from './src/components/RecordingModal';
+
+// Konfiguracja API URL w zależności od platformy
+const API_URL =
+  Platform.select({
+    ios: 'http://localhost:8000',
+    android: 'http://10.0.2.2:8000', // Standardowy adres hosta dla emulatora Android
+  }) || 'http://localhost:8000';
 
 type RootStackParamList = {
   Home: undefined;
@@ -88,20 +95,31 @@ function HomeScreen({ navigation }: Props) {
         name: 'recording.m4a',
       } as any);
 
-      const response = await fetch('http://localhost:8000/whisper/transcribe', {
+      console.log('Wysyłanie nagrania do:', `${API_URL}/whisper/transcribe`);
+
+      const response = await fetch(`${API_URL}/whisper/transcribe`, {
         method: 'POST',
         body: formData,
         headers: {
           'Content-Type': 'multipart/form-data',
+          Accept: 'application/json',
         },
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Błąd serwera: ${response.status} - ${errorText}`);
+      }
 
       const data = await response.json();
       if (data.text) {
         setPrompt(data.text);
+      } else if (data.error) {
+        throw new Error(data.error);
       }
     } catch (error) {
       console.error('Błąd podczas wysyłania nagrania:', error);
+      alert('Nie udało się przetworzyć nagrania. Spróbuj ponownie.');
     } finally {
       setIsWhisperModalVisible(false);
     }

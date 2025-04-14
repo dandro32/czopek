@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal, View, StyleSheet } from 'react-native';
 import { Button, Text, useTheme } from '@rneui/themed';
 import { Audio } from 'expo-av';
@@ -12,44 +12,80 @@ type Props = {
 export const RecordingModal = ({ isVisible, onClose, onSend }: Props) => {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [silenceTimeout, setSilenceTimeout] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const silenceTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastSoundTime = useRef<number>(Date.now());
   const { theme } = useTheme();
 
   useEffect(() => {
     return () => {
-      if (silenceTimeout) {
-        clearTimeout(silenceTimeout);
+      if (silenceTimer.current) {
+        clearTimeout(silenceTimer.current);
       }
       stopRecording();
     };
   }, []);
 
-  const startRecording = async () => {
+  const startSilenceDetection = async () => {
     try {
       await Audio.requestPermissionsAsync();
+      const { status } = await Audio.getPermissionsAsync();
+      if (status !== 'granted') return;
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const recordingOptions = {
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        android: {
+          ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
+          isAudioInputDetected: true,
+        },
+        ios: {
+          ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+      };
 
+      const { recording } = await Audio.Recording.createAsync(recordingOptions);
       setRecording(recording);
       setIsRecording(true);
 
-      const timeout = setTimeout(() => {
-        if (isRecording) {
-          stopRecording();
+      recording.setOnRecordingStatusUpdate((status) => {
+        if (status.isRecording && status.metering !== undefined) {
+          const currentTime = Date.now();
+          if (status.metering > -50) {
+            // Próg dźwięku
+            lastSoundTime.current = currentTime;
+          } else {
+            const silenceTime = currentTime - lastSoundTime.current;
+            if (silenceTime >= 5000) {
+              // 5 sekund ciszy
+              stopRecording();
+            }
+          }
         }
-      }, 5000);
-      setSilenceTimeout(timeout);
+      });
+
+      await recording.setProgressUpdateInterval(100);
     } catch (error) {
       console.error('Błąd podczas rozpoczynania nagrywania:', error);
     }
+  };
+
+  const startRecording = async () => {
+    if (silenceTimer.current) {
+      clearTimeout(silenceTimer.current);
+    }
+    lastSoundTime.current = Date.now();
+    await startSilenceDetection();
   };
 
   const stopRecording = async () => {
@@ -60,8 +96,8 @@ export const RecordingModal = ({ isVisible, onClose, onSend }: Props) => {
       const uri = recording.getURI();
       setRecording(null);
       setIsRecording(false);
-      if (silenceTimeout) {
-        clearTimeout(silenceTimeout);
+      if (silenceTimer.current) {
+        clearTimeout(silenceTimer.current);
       }
       if (uri) {
         onSend(uri);
