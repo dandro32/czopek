@@ -16,6 +16,7 @@ export function AddTaskScreen({ navigation }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [reminderDate, setReminderDate] = useState('');
   const [priority, setPriority] = useState('medium');
   const { theme } = useTheme();
 
@@ -40,6 +41,7 @@ export function AddTaskScreen({ navigation }: Props) {
           title,
           description,
           due_date: dueDate || null,
+          reminder_date: reminderDate || null,
           priority,
         }),
       });
@@ -58,6 +60,17 @@ export function AddTaskScreen({ navigation }: Props) {
     { title: 'Niski', value: 'low', color: theme.colors.success },
     { title: 'Średni', value: 'medium', color: theme.colors.warning },
     { title: 'Wysoki', value: 'high', color: theme.colors.error },
+  ];
+
+  // Funkcja do generowania wspólnych stylów dla inputów
+  const getInputStyle = () => [
+    styles.input,
+    {
+      color: theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
+      borderColor: theme.colors.grey3,
+      backgroundColor:
+        theme.mode === 'dark' ? theme.colors.grey0 : theme.colors.white,
+    },
   ];
 
   return (
@@ -79,14 +92,7 @@ export function AddTaskScreen({ navigation }: Props) {
         <TextInput
           value={title}
           onChangeText={setTitle}
-          style={[
-            styles.input,
-            {
-              color:
-                theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
-              borderColor: theme.colors.grey3,
-            },
-          ]}
+          style={getInputStyle()}
           placeholder="Wpisz tytuł zadania"
           placeholderTextColor={theme.colors.grey3}
         />
@@ -97,14 +103,7 @@ export function AddTaskScreen({ navigation }: Props) {
         <TextInput
           value={description}
           onChangeText={setDescription}
-          style={[
-            styles.textArea,
-            {
-              color:
-                theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
-              borderColor: theme.colors.grey3,
-            },
-          ]}
+          style={[getInputStyle()[0], getInputStyle()[1], styles.textArea]}
           placeholder="Wpisz opis zadania"
           placeholderTextColor={theme.colors.grey3}
           multiline
@@ -117,20 +116,44 @@ export function AddTaskScreen({ navigation }: Props) {
         <Text style={[styles.label, { color: theme.colors.grey1 }]}>
           Data wykonania
         </Text>
-        <TextInput
-          value={dueDate}
-          onChangeText={setDueDate}
-          style={[
-            styles.input,
-            {
-              color:
-                theme.mode === 'dark' ? theme.colors.white : theme.colors.black,
-              borderColor: theme.colors.grey3,
-            },
-          ]}
-          placeholder="RRRR-MM-DD"
-          placeholderTextColor={theme.colors.grey3}
-        />
+        <View style={styles.inputWithIcon}>
+          <TextInput
+            value={dueDate}
+            onChangeText={setDueDate}
+            style={getInputStyle()}
+            placeholder="RRRR-MM-DD"
+            placeholderTextColor={theme.colors.grey3}
+          />
+          <Icon
+            name="calendar-today"
+            type="material"
+            color={theme.colors.grey1}
+            size={20}
+            containerStyle={styles.inputIcon}
+          />
+        </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.colors.grey1 }]}>
+          Przypomnienie
+        </Text>
+        <View style={styles.inputWithIcon}>
+          <TextInput
+            value={reminderDate}
+            onChangeText={setReminderDate}
+            style={getInputStyle()}
+            placeholder="RRRR-MM-DD HH:MM"
+            placeholderTextColor={theme.colors.grey3}
+          />
+          <Icon
+            name="notifications"
+            type="material"
+            color={theme.colors.grey1}
+            size={20}
+            containerStyle={styles.inputIcon}
+          />
+        </View>
       </View>
 
       <View style={styles.inputGroup}>
@@ -146,14 +169,11 @@ export function AddTaskScreen({ navigation }: Props) {
                 styles.priorityButton,
                 {
                   backgroundColor:
-                    priority === btn.value ? btn.color : theme.colors.grey5,
+                    priority === btn.value ? btn.color : theme.colors.grey4,
                 },
               ]}
               titleStyle={{
-                color:
-                  priority === btn.value
-                    ? theme.colors.white
-                    : theme.colors.grey1,
+                color: theme.colors.white,
               }}
               onPress={() => setPriority(btn.value)}
             />
@@ -178,6 +198,7 @@ export function AddTaskScreen({ navigation }: Props) {
               : theme.colors.grey3,
           },
         ]}
+        titleStyle={{ color: theme.colors.white }}
         onPress={handleAddTask}
         disabled={!title.trim()}
       />
@@ -192,6 +213,7 @@ const styles = StyleSheet.create({
   },
   title: {
     marginBottom: 30,
+    textAlign: 'center',
   },
   inputGroup: {
     marginBottom: 20,
@@ -208,25 +230,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   textArea: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
     minHeight: 100,
+  },
+  inputWithIcon: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputIcon: {
+    position: 'absolute',
+    right: 10,
   },
   priorityButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
   },
   priorityButton: {
+    flex: 1,
     paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 10,
-    marginRight: 10,
   },
   addButton: {
-    marginTop: 20,
+    marginTop: 30,
     borderRadius: 10,
     paddingVertical: 15,
+    paddingHorizontal: 20,
   },
 });
