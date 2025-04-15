@@ -15,6 +15,7 @@ import {
 import { useState, useCallback, useEffect } from 'react';
 import { lightTheme, darkTheme } from './src/theme';
 import { RecordingModal } from './src/components/RecordingModal';
+import { AddTaskScreen } from './src/components/AddTaskScreen';
 
 // Konfiguracja API URL w zależności od platformy
 const API_URL =
@@ -26,6 +27,7 @@ const API_URL =
 type RootStackParamList = {
   Home: undefined;
   TodoList: undefined;
+  AddTask: undefined;
 };
 
 type Props = {
@@ -231,7 +233,7 @@ function HomeScreen({ navigation }: Props) {
             styles.button,
             { backgroundColor: theme.colors.primary },
           ]}
-          onPress={() => {}}
+          onPress={() => navigation.navigate('AddTask')}
         />
 
         <Button
@@ -351,6 +353,29 @@ export default function App() {
             component={TodoListScreen}
             options={({ navigation }) => ({
               title: 'Lista zadań',
+              headerStyle: getHeaderStyle(),
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+              headerRight,
+              headerLeft: () => (
+                <Icon
+                  name="home"
+                  type="material"
+                  color="#fff"
+                  size={28}
+                  containerStyle={{ marginLeft: 10 }}
+                  onPress={() => navigateToHome(navigation)}
+                />
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="AddTask"
+            component={AddTaskScreen}
+            options={({ navigation }) => ({
+              title: 'Dodaj zadanie',
               headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
               headerTitleStyle: {
