@@ -16,18 +16,21 @@ import { useState, useCallback, useEffect } from 'react';
 import { lightTheme, darkTheme } from './src/theme';
 import { RecordingModal } from './src/components/RecordingModal';
 import { AddTaskScreen } from './src/components/AddTaskScreen';
+import { LoginScreen } from './src/components/LoginScreen';
+import { RegisterScreen } from './src/components/RegisterScreen';
+import {
+  isAuthenticated as checkAuth,
+  authHeader,
+  API_URL,
+} from './src/services/auth';
 
-// Konfiguracja API URL w zależności od platformy
-const API_URL =
-  Platform.select({
-    ios: 'http://localhost:8000',
-    android: 'http://10.0.2.2:8000', // Standardowy adres hosta dla emulatora Android
-  }) || 'http://localhost:8000';
-
+// Definicja parametrów dla nawigacji
 type RootStackParamList = {
   Home: undefined;
   TodoList: undefined;
   AddTask: undefined;
+  Login: undefined;
+  Register: undefined;
 };
 
 type Props = {
@@ -312,6 +315,24 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [isUserAuthenticated, setIsUserAuthenticated] = useState<
+    boolean | null
+  >(null);
+
+  // Sprawdzenie, czy użytkownik jest zalogowany przy starcie aplikacji
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const isAuth = await checkAuth();
+        setIsUserAuthenticated(isAuth);
+      } catch (error) {
+        console.error('Błąd podczas sprawdzania statusu logowania:', error);
+        setIsUserAuthenticated(false);
+      }
+    };
+
+    checkAuthStatus();
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setIsDarkMode(!isDarkMode);
@@ -346,79 +367,136 @@ export default function App() {
     setIsMenuVisible(false);
   }, []);
 
+  const handleAuthSuccess = useCallback(() => {
+    setIsUserAuthenticated(true);
+  }, []);
+
+  // Pokaż loader podczas sprawdzania stanu autoryzacji
+  if (isUserAuthenticated === null) {
+    return (
+      <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
+        <View style={styles.loaderContainer}>
+          <Text>Ładowanie...</Text>
+        </View>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
       <NavigationContainer>
         <Stack.Navigator>
-          <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={({ navigation }) => ({
-              title: 'Czopek',
-              headerStyle: getHeaderStyle(),
-              headerTintColor: '#fff',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-              headerRight,
-              headerLeft: () => (
-                <Icon
-                  name="home"
-                  type="material"
-                  color="#fff"
-                  size={28}
-                  containerStyle={{ marginLeft: 10 }}
-                  onPress={() => navigateToHome(navigation)}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="TodoList"
-            component={TodoListScreen}
-            options={({ navigation }) => ({
-              title: 'Lista zadań',
-              headerStyle: getHeaderStyle(),
-              headerTintColor: '#fff',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-              headerRight,
-              headerLeft: () => (
-                <Icon
-                  name="home"
-                  type="material"
-                  color="#fff"
-                  size={28}
-                  containerStyle={{ marginLeft: 10 }}
-                  onPress={() => navigateToHome(navigation)}
-                />
-              ),
-            })}
-          />
-          <Stack.Screen
-            name="AddTask"
-            component={AddTaskScreen}
-            options={({ navigation }) => ({
-              title: 'Dodaj zadanie',
-              headerStyle: getHeaderStyle(),
-              headerTintColor: '#fff',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-              headerRight,
-              headerLeft: () => (
-                <Icon
-                  name="home"
-                  type="material"
-                  color="#fff"
-                  size={28}
-                  containerStyle={{ marginLeft: 10 }}
-                  onPress={() => navigateToHome(navigation)}
-                />
-              ),
-            })}
-          />
+          {isUserAuthenticated ? (
+            // Zalogowany użytkownik widzi aplikację
+            <>
+              <Stack.Screen
+                name="Home"
+                component={HomeScreen}
+                options={({ navigation }) => ({
+                  title: 'Czopek',
+                  headerStyle: getHeaderStyle(),
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                  headerRight,
+                  headerLeft: () => (
+                    <Icon
+                      name="home"
+                      type="material"
+                      color="#fff"
+                      size={28}
+                      containerStyle={{ marginLeft: 10 }}
+                      onPress={() => navigateToHome(navigation)}
+                    />
+                  ),
+                })}
+              />
+              <Stack.Screen
+                name="TodoList"
+                component={TodoListScreen}
+                options={({ navigation }) => ({
+                  title: 'Lista zadań',
+                  headerStyle: getHeaderStyle(),
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                  headerRight,
+                  headerLeft: () => (
+                    <Icon
+                      name="home"
+                      type="material"
+                      color="#fff"
+                      size={28}
+                      containerStyle={{ marginLeft: 10 }}
+                      onPress={() => navigateToHome(navigation)}
+                    />
+                  ),
+                })}
+              />
+              <Stack.Screen
+                name="AddTask"
+                component={AddTaskScreen}
+                options={({ navigation }) => ({
+                  title: 'Dodaj zadanie',
+                  headerStyle: getHeaderStyle(),
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                  headerRight,
+                  headerLeft: () => (
+                    <Icon
+                      name="home"
+                      type="material"
+                      color="#fff"
+                      size={28}
+                      containerStyle={{ marginLeft: 10 }}
+                      onPress={() => navigateToHome(navigation)}
+                    />
+                  ),
+                })}
+              />
+            </>
+          ) : (
+            // Niezalogowany użytkownik widzi ekrany logowania i rejestracji
+            <>
+              <Stack.Screen
+                name="Login"
+                options={{
+                  title: 'Logowanie',
+                  headerStyle: getHeaderStyle(),
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                }}
+              >
+                {(props) => (
+                  <LoginScreen {...props} onLoginSuccess={handleAuthSuccess} />
+                )}
+              </Stack.Screen>
+              <Stack.Screen
+                name="Register"
+                options={{
+                  title: 'Rejestracja',
+                  headerStyle: getHeaderStyle(),
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                }}
+              >
+                {(props) => (
+                  <RegisterScreen
+                    {...props}
+                    onRegisterSuccess={handleAuthSuccess}
+                  />
+                )}
+              </Stack.Screen>
+            </>
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </ThemeProvider>
@@ -471,5 +549,10 @@ const styles = StyleSheet.create({
   button: {
     borderRadius: 10,
     paddingVertical: 15,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -8,11 +8,13 @@ import {
   TouchableOpacity,
   Modal,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { useTheme, Text, Button, Icon } from '@rneui/themed';
 import DateTimePickerModal, { DateType } from 'react-native-ui-datepicker';
 import { format, setHours, setMinutes, setSeconds } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Props = {
   navigation: any;
@@ -163,10 +165,21 @@ export function AddTaskScreen({ navigation }: Props) {
           android: 'http://10.0.2.2:8000',
         }) || 'http://localhost:8000';
 
+      // Pobieramy token z AsyncStorage
+      const token = await AsyncStorage.getItem('@auth_token');
+      if (!token) {
+        Alert.alert(
+          'Błąd',
+          'Nie jesteś zalogowany. Zaloguj się, aby dodać zadanie.'
+        );
+        return;
+      }
+
       const response = await fetch(`${API_URL}/tasks/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           title,
@@ -180,12 +193,15 @@ export function AddTaskScreen({ navigation }: Props) {
       });
 
       if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Błąd odpowiedzi:', response.status, errorData);
         throw new Error('Wystąpił błąd podczas dodawania zadania');
       }
 
       navigation.navigate('TodoList');
     } catch (error) {
       console.error('Błąd dodawania zadania:', error);
+      Alert.alert('Błąd', 'Nie udało się dodać zadania. Spróbuj ponownie.');
     }
   };
 
