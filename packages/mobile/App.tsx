@@ -1,3 +1,4 @@
+import React from 'react';
 import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, TextInput, Platform } from 'react-native';
@@ -22,7 +23,11 @@ import {
   isAuthenticated as checkAuth,
   authHeader,
   API_URL,
+  getCurrentUser,
+  logout,
+  User,
 } from './src/services/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Definicja parametrów dla nawigacji
 type RootStackParamList = {
@@ -41,6 +46,7 @@ function HomeScreen({ navigation }: Props) {
   const [prompt, setPrompt] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isWhisperModalVisible, setIsWhisperModalVisible] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -74,6 +80,30 @@ function HomeScreen({ navigation }: Props) {
         Voice.removeAllListeners();
       });
     };
+  }, []);
+
+  useEffect(() => {
+    // Pobierz dane użytkownika przy montowaniu komponentu
+    const fetchUserData = async () => {
+      try {
+        const userData = await getCurrentUser();
+        console.log('Pobrano dane użytkownika:', userData);
+        setCurrentUser(userData);
+
+        // Jeśli nie ma danych użytkownika, spróbuj pobrać token i wyświetlić go do debugowania
+        if (!userData) {
+          const token = await AsyncStorage.getItem('@auth_token');
+          console.log(
+            'Token autoryzacji:',
+            token ? token.substring(0, 20) + '...' : 'brak'
+          );
+        }
+      } catch (error) {
+        console.error('Błąd podczas pobierania danych użytkownika:', error);
+      }
+    };
+
+    fetchUserData();
   }, []);
 
   const handleVoiceRecord = async () => {
@@ -162,6 +192,21 @@ function HomeScreen({ navigation }: Props) {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Wywołanie funkcji aktualizującej stan w głównym komponencie
+      if (navigation.getParent()) {
+        navigation.getParent().setParams({
+          logoutSuccess: true,
+          logoutTimestamp: Date.now(),
+        });
+      }
+    } catch (error) {
+      console.error('Błąd podczas wylogowywania:', error);
+    }
+  };
+
   return (
     <View
       style={[
@@ -172,6 +217,60 @@ function HomeScreen({ navigation }: Props) {
         },
       ]}
     >
+      <View
+        style={[
+          styles.userInfoContainer,
+          {
+            backgroundColor:
+              theme.mode === 'dark' ? theme.colors.grey0 : theme.colors.grey5,
+            borderBottomColor:
+              theme.mode === 'dark' ? theme.colors.grey3 : theme.colors.grey4,
+          },
+        ]}
+      >
+        <View style={styles.userDetailContainer}>
+          <Text
+            style={[
+              styles.welcomeText,
+              {
+                color:
+                  theme.mode === 'dark'
+                    ? theme.colors.white
+                    : theme.colors.black,
+              },
+            ]}
+          >
+            Witaj,
+          </Text>
+          <Text
+            style={[
+              styles.usernameText,
+              {
+                color:
+                  theme.mode === 'dark'
+                    ? theme.colors.primary
+                    : theme.colors.primary,
+              },
+            ]}
+          >
+            {currentUser ? currentUser.username : 'Użytkownik'}
+          </Text>
+        </View>
+        <Button
+          title="Wyloguj"
+          type="solid"
+          buttonStyle={{
+            backgroundColor:
+              theme.mode === 'dark' ? theme.colors.error : theme.colors.error,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 5,
+          }}
+          titleStyle={{ color: 'white', fontSize: 14 }}
+          onPress={handleLogout}
+        />
+      </View>
+
       <Text h1 style={[styles.title, { color: theme.colors.primary }]}>
         Czopek - mój cudowny asystent
       </Text>
@@ -318,6 +417,7 @@ export default function App() {
   const [isUserAuthenticated, setIsUserAuthenticated] = useState<
     boolean | null
   >(null);
+  const [logoutTrigger, setLogoutTrigger] = useState(0);
 
   // Sprawdzenie, czy użytkownik jest zalogowany przy starcie aplikacji
   useEffect(() => {
@@ -332,7 +432,7 @@ export default function App() {
     };
 
     checkAuthStatus();
-  }, []);
+  }, [logoutTrigger]);
 
   const toggleTheme = useCallback(() => {
     setIsDarkMode(!isDarkMode);
@@ -371,6 +471,11 @@ export default function App() {
     setIsUserAuthenticated(true);
   }, []);
 
+  const handleLogoutSuccess = useCallback(() => {
+    setLogoutTrigger((prev) => prev + 1);
+    setIsUserAuthenticated(false);
+  }, []);
+
   // Pokaż loader podczas sprawdzania stanu autoryzacji
   if (isUserAuthenticated === null) {
     return (
@@ -385,7 +490,19 @@ export default function App() {
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
       <NavigationContainer>
-        <Stack.Navigator>
+        <Stack.Navigator
+          screenListeners={{
+            state: (e: any) => {
+              const routes = e.data.state.routes;
+              if (routes && routes.length > 0 && routes[0].params) {
+                const params = routes[0].params;
+                if (params.logoutSuccess) {
+                  handleLogoutSuccess();
+                }
+              }
+            },
+          }}
+        >
           {isUserAuthenticated ? (
             // Zalogowany użytkownik widzi aplikację
             <>
@@ -554,5 +671,26 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  userInfoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  userDetailContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  welcomeText: {
+    fontSize: 16,
+    marginRight: 5,
+  },
+  usernameText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });

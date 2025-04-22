@@ -125,23 +125,19 @@ export function LoginScreen({ navigation, onLoginSuccess }: Props) {
         </View>
 
         <Button
-          title={isLoading ? '' : 'Zaloguj się'}
-          icon={isLoading ? { name: '', type: 'material' } : undefined}
+          title={isLoading ? 'Ładowanie...' : 'Zaloguj się'}
           buttonStyle={[
             styles.loginButton,
             { backgroundColor: theme.colors.primary },
           ]}
           onPress={handleLogin}
           disabled={isLoading}
-        >
-          {isLoading && (
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.white}
-              style={styles.loader}
-            />
-          )}
-        </Button>
+          disabledStyle={{ backgroundColor: theme.colors.grey3 }}
+          disabledTitleStyle={{ color: theme.colors.white }}
+          titleStyle={{ color: theme.colors.white }}
+          loadingProps={{ color: theme.colors.white }}
+          loading={isLoading}
+        />
 
         <View style={styles.registerContainer}>
           <Text style={{ color: theme.colors.grey1 }}>

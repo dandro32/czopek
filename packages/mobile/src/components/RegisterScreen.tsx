@@ -212,23 +212,19 @@ export function RegisterScreen({ navigation, onRegisterSuccess }: Props) {
           </View>
 
           <Button
-            title={isLoading ? '' : 'Zarejestruj się'}
-            icon={isLoading ? { name: '', type: 'material' } : undefined}
+            title={isLoading ? 'Ładowanie...' : 'Zarejestruj się'}
             buttonStyle={[
               styles.registerButton,
               { backgroundColor: theme.colors.primary },
             ]}
             onPress={handleRegister}
             disabled={isLoading}
-          >
-            {isLoading && (
-              <ActivityIndicator
-                size="small"
-                color={theme.colors.white}
-                style={styles.loader}
-              />
-            )}
-          </Button>
+            disabledStyle={{ backgroundColor: theme.colors.grey3 }}
+            disabledTitleStyle={{ color: theme.colors.white }}
+            titleStyle={{ color: theme.colors.white }}
+            loadingProps={{ color: theme.colors.white }}
+            loading={isLoading}
+          />
 
           <View style={styles.loginContainer}>
             <Text style={{ color: theme.colors.grey1 }}>Masz już konto?</Text>

@@ -88,4 +88,8 @@ async def refresh_token(token: RefreshToken, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 async def logout(current_user: DBUser = Depends(get_current_user)):
-    return {"message": "Wylogowano pomyślnie"} 
+    return {"message": "Wylogowano pomyślnie"}
+
+@router.get("/me", response_model=User)
+async def get_current_user_info(current_user: DBUser = Depends(get_current_user)):
+    return current_user 

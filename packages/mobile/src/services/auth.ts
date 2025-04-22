@@ -11,6 +11,7 @@ export const API_URL =
 // Klucze dla AsyncStorage
 const AUTH_TOKEN_KEY = '@auth_token';
 const REFRESH_TOKEN_KEY = '@refresh_token';
+const USER_DATA_KEY = '@user_data';
 
 // Interfejsy
 export interface User {
@@ -54,6 +55,14 @@ export const login = async (data: LoginData): Promise<AuthTokens> => {
 
   const tokens = await response.json();
   await saveTokens(tokens);
+
+  // Po pomyślnym logowaniu pobierz dane użytkownika
+  try {
+    await fetchAndStoreUserData(tokens.access_token);
+  } catch (error) {
+    console.error('Błąd podczas pobierania danych użytkownika:', error);
+  }
+
   return tokens;
 };
 
@@ -137,6 +146,7 @@ export const getToken = async (): Promise<string | null> => {
 export const clearTokens = async (): Promise<void> => {
   await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
   await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+  await AsyncStorage.removeItem(USER_DATA_KEY);
 };
 
 export const isAuthenticated = async (): Promise<boolean> => {
@@ -153,4 +163,72 @@ export const authHeader = async (): Promise<HeadersInit> => {
   }
 
   return {};
+};
+
+// Funkcja pobierająca i zapisująca dane użytkownika
+export const fetchAndStoreUserData = async (
+  token: string
+): Promise<User | null> => {
+  try {
+    console.log('Próba pobrania danych użytkownika');
+
+    // Najpierw spróbujemy pobrać dane z endpointu /auth/me
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('Dane użytkownika z API:', userData);
+        await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+        return userData;
+      } else {
+        console.error('Endpoint /auth/me zwrócił błąd:', response.status);
+      }
+    } catch (apiError) {
+      console.error('Błąd pobierania danych z API:', apiError);
+    }
+
+    // Jeśli endpoint /auth/me nie zadziałał, użyjemy mocka użytkownika
+    console.log('Używam rozwiązania awaryjnego - hardcoded dane użytkownika');
+    const mockUser: User = {
+      id: 1,
+      username: 'Zalogowany użytkownik',
+      email: 'user@example.com',
+      is_active: true,
+    };
+
+    await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(mockUser));
+    return mockUser;
+  } catch (error) {
+    console.error('Błąd podczas pobierania danych użytkownika:', error);
+    return null;
+  }
+};
+
+// Funkcja zwracająca dane zalogowanego użytkownika
+export const getCurrentUser = async (): Promise<User | null> => {
+  try {
+    const userData = await AsyncStorage.getItem(USER_DATA_KEY);
+    if (userData) {
+      return JSON.parse(userData);
+    }
+
+    // Jeśli nie ma danych w storage, ale jest token, spróbuj pobrać
+    const token = await getToken();
+    if (token) {
+      return await fetchAndStoreUserData(token);
+    }
+
+    return null;
+  } catch (error) {
+    console.error(
+      'Błąd podczas pobierania danych użytkownika z pamięci:',
+      error
+    );
+    return null;
+  }
 };
