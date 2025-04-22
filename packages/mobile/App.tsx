@@ -90,6 +90,8 @@ function HomeScreen({ navigation }: Props) {
 
   const handleWhisperRecord = async (audioUri: string) => {
     try {
+      console.log(`Rozpoczynam przetwarzanie nagrania z URI: ${audioUri}`);
+
       const formData = new FormData();
       formData.append('file', {
         uri: audioUri,
@@ -97,19 +99,24 @@ function HomeScreen({ navigation }: Props) {
         name: 'recording.m4a',
       } as any);
 
-      console.log('Wysyłanie nagrania do:', `${API_URL}/whisper/transcribe`);
+      const apiUrl = `${API_URL}/whisper/transcribe`;
+      console.log(`Wysyłanie nagrania do: ${apiUrl}`);
+      console.log('FormData:', JSON.stringify(formData));
 
-      const response = await fetch(`${API_URL}/whisper/transcribe`, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Content-Type': 'multipart/form-data',
-          Accept: 'application/json',
         },
+      }).catch((error) => {
+        console.error('Błąd fetch:', error);
+        throw error;
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(`Błąd serwera: ${response.status} - ${errorText}`);
         throw new Error(`Błąd serwera: ${response.status} - ${errorText}`);
       }
 
@@ -117,11 +124,29 @@ function HomeScreen({ navigation }: Props) {
       if (data.text) {
         setPrompt(data.text);
       } else if (data.error) {
+        console.error('Błąd odpowiedzi API:', data.error);
         throw new Error(data.error);
       }
     } catch (error) {
       console.error('Błąd podczas wysyłania nagrania:', error);
-      alert('Nie udało się przetworzyć nagrania. Spróbuj ponownie.');
+
+      // Sprawdź, czy backend działa - prosta pingowa metoda
+      try {
+        const healthCheck = await fetch(`${API_URL}/health`).catch((e) => {
+          console.error('Błąd health check:', e);
+          return null;
+        });
+        console.log(
+          'Health check status:',
+          healthCheck ? healthCheck.status : 'failed'
+        );
+      } catch (healthError) {
+        console.error('Błąd podczas sprawdzania health:', healthError);
+      }
+
+      alert(
+        'Nie udało się przetworzyć nagrania. Sprawdź połączenie sieciowe i upewnij się, że serwer backend jest uruchomiony.'
+      );
     } finally {
       setIsWhisperModalVisible(false);
     }

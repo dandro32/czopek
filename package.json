@@ -23,5 +23,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.2"
   }
 }
