@@ -103,27 +103,39 @@ export const logout = async (): Promise<void> => {
 };
 
 export const refreshToken = async (): Promise<AuthTokens | null> => {
-  const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-
-  if (!refreshToken) {
-    return null;
-  }
-
   try {
+    console.log('Próba odświeżenia tokenu');
+    const refreshTokenValue = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+
+    if (!refreshTokenValue) {
+      console.log('Brak tokenu odświeżania w pamięci');
+      return null;
+    }
+
+    console.log('Wysyłanie żądania odświeżenia tokenu');
     const response = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refresh_token: refreshTokenValue }),
     });
 
     if (!response.ok) {
+      console.error('Błąd odświeżania tokenu, status:', response.status);
+      try {
+        const errorText = await response.text();
+        console.error('Treść błędu:', errorText);
+      } catch (e) {
+        console.error('Nie można odczytać treści błędu');
+      }
+
       await clearTokens();
       return null;
     }
 
     const tokens = await response.json();
+    console.log('Otrzymano nowe tokeny, zapisuję');
     await saveTokens(tokens);
     return tokens;
   } catch (error) {

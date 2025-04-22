@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,6 +15,7 @@ import DateTimePickerModal, { DateType } from 'react-native-ui-datepicker';
 import { format, setHours, setMinutes, setSeconds } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL, refreshToken } from '../services/auth';
 
 type Props = {
   navigation: any;
@@ -159,21 +160,41 @@ export function AddTaskScreen({ navigation }: Props) {
     }
 
     try {
-      const API_URL =
-        Platform.select({
-          ios: 'http://localhost:8000',
-          android: 'http://10.0.2.2:8000',
-        }) || 'http://localhost:8000';
+      // Pobieramy token
+      let token = await AsyncStorage.getItem('@auth_token');
 
-      // Pobieramy token z AsyncStorage
-      const token = await AsyncStorage.getItem('@auth_token');
+      // Jeśli token nie istnieje, spróbuj odświeżyć
       if (!token) {
-        Alert.alert(
-          'Błąd',
-          'Nie jesteś zalogowany. Zaloguj się, aby dodać zadanie.'
-        );
-        return;
+        const newTokens = await refreshToken();
+        if (newTokens) {
+          token = newTokens.access_token;
+          console.log('Odświeżono token');
+        } else {
+          Alert.alert('Błąd', 'Twoja sesja wygasła. Zaloguj się ponownie.');
+          if (navigation && navigation.reset) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
+          }
+          return;
+        }
       }
+
+      // Log pełnego żądania do diagnostyki
+      const taskData = {
+        title,
+        description,
+        due_date: dueDate ? format(dueDate, 'yyyy-MM-dd HH:mm:ss') : null,
+        reminder_date: reminderDate
+          ? format(reminderDate, 'yyyy-MM-dd HH:mm:ss')
+          : null,
+        priority,
+      };
+
+      console.log('Wysyłanie zadania:', JSON.stringify(taskData));
+      console.log('URL: ', `${API_URL}/tasks/`);
+      console.log('Token: ', token ? token.substring(0, 20) + '...' : 'brak');
 
       const response = await fetch(`${API_URL}/tasks/`, {
         method: 'POST',
@@ -181,27 +202,74 @@ export function AddTaskScreen({ navigation }: Props) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          title,
-          description,
-          due_date: dueDate ? format(dueDate, 'yyyy-MM-dd HH:mm:ss') : null,
-          reminder_date: reminderDate
-            ? format(reminderDate, 'yyyy-MM-dd HH:mm:ss')
-            : null,
-          priority,
-        }),
+        body: JSON.stringify(taskData),
       });
 
+      // Sprawdź dokładny status błędu
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Błąd odpowiedzi:', response.status, errorData);
-        throw new Error('Wystąpił błąd podczas dodawania zadania');
+        const errorStatus = response.status;
+        let errorData;
+
+        try {
+          errorData = await response.text();
+          console.error('Błąd odpowiedzi:', errorStatus, errorData);
+        } catch (parseError) {
+          console.error('Nie można odczytać treści błędu');
+        }
+
+        // Jeśli token wygasł, spróbuj odświeżyć i ponowić żądanie
+        if (errorStatus === 401) {
+          const newTokens = await refreshToken();
+          if (newTokens) {
+            // Ponów żądanie z nowym tokenem
+            const retryResponse = await fetch(`${API_URL}/tasks/`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${newTokens.access_token}`,
+              },
+              body: JSON.stringify(taskData),
+            });
+
+            if (retryResponse.ok) {
+              navigation.navigate('TodoList');
+              return;
+            } else {
+              console.error(
+                'Błąd po odświeżeniu tokenu:',
+                await retryResponse.text()
+              );
+            }
+          }
+
+          // Jeśli nie udało się odświeżyć, przekieruj do ekranu logowania
+          Alert.alert(
+            'Sesja wygasła',
+            'Zaloguj się ponownie, aby kontynuować.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  if (navigation && navigation.reset) {
+                    navigation.reset({
+                      index: 0,
+                      routes: [{ name: 'Login' }],
+                    });
+                  }
+                },
+              },
+            ]
+          );
+          return;
+        }
+
+        throw new Error(`Kod błędu: ${errorStatus}`);
       }
 
       navigation.navigate('TodoList');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Błąd dodawania zadania:', error);
-      Alert.alert('Błąd', 'Nie udało się dodać zadania. Spróbuj ponownie.');
+      Alert.alert('Błąd', `Nie udało się dodać zadania: ${error.message}`);
     }
   };
 
