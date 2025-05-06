@@ -17,6 +17,7 @@ router = APIRouter()
 
 @router.post("", response_model=Task)
 async def create_new_task(task: TaskCreate, db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
+    print(f"[TASKS] Autoryzowano użytkownika: id={current_user.id}, email={current_user.email}, username={current_user.username}")
     try:
         return create_task(db, task, current_user)
     except Exception as e:
