@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text, Icon, useTheme } from '@rneui/themed';
 import { Task } from '../types';
@@ -8,38 +8,38 @@ interface TaskCardProps {
   onPress: () => void;
 }
 
-export const TaskCard = ({ task, onPress }: TaskCardProps) => {
+// Funkcja zwracająca kolor priorytetu
+const getPriorityColor = (priority?: string, theme?: any) => {
+  switch (priority) {
+    case 'high':
+      return theme.colors.error;
+    case 'medium':
+      return theme.colors.warning;
+    case 'low':
+      return theme.colors.success;
+    default:
+      return theme.colors.grey2;
+  }
+};
+
+// Funkcja formatująca datę
+const formatDate = (dateString?: string) => {
+  if (!dateString) return null;
+
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pl-PL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch (error) {
+    return null;
+  }
+};
+
+export const TaskCard = memo(({ task, onPress }: TaskCardProps) => {
   const { theme } = useTheme();
-
-  // Funkcja zwracająca kolor priorytetu
-  const getPriorityColor = (priority?: string) => {
-    switch (priority) {
-      case 'high':
-        return theme.colors.error;
-      case 'medium':
-        return theme.colors.warning;
-      case 'low':
-        return theme.colors.success;
-      default:
-        return theme.colors.grey2;
-    }
-  };
-
-  // Funkcja formatująca datę
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('pl-PL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-    } catch (error) {
-      return null;
-    }
-  };
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
@@ -60,7 +60,7 @@ export const TaskCard = ({ task, onPress }: TaskCardProps) => {
         <View
           style={[
             styles.priorityBar,
-            { backgroundColor: getPriorityColor(task.priority) },
+            { backgroundColor: getPriorityColor(task.priority, theme) },
           ]}
         />
 
@@ -111,6 +111,7 @@ export const TaskCard = ({ task, onPress }: TaskCardProps) => {
                       : theme.colors.grey2,
                 },
               ]}
+              numberOfLines={2}
             >
               {task.description}
             </Text>
@@ -151,7 +152,7 @@ export const TaskCard = ({ task, onPress }: TaskCardProps) => {
             <Text
               style={[
                 styles.priority,
-                { color: getPriorityColor(task.priority) },
+                { color: getPriorityColor(task.priority, theme) },
               ]}
             >
               {task.priority === 'high'
@@ -167,40 +168,39 @@ export const TaskCard = ({ task, onPress }: TaskCardProps) => {
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 const styles = StyleSheet.create({
   card: {
-    marginVertical: 8,
     borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
     borderWidth: 1,
+    marginVertical: 5,
+    overflow: 'hidden',
+    flexDirection: 'row',
   },
   priorityBar: {
-    height: 8,
+    width: 6,
+    height: '100%',
   },
   cardContent: {
-    padding: 16,
+    flex: 1,
+    padding: 15,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     flex: 1,
+    marginRight: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 12,
   },
   statusText: {
@@ -210,12 +210,11 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
     alignItems: 'center',
   },
   dateContainer: {

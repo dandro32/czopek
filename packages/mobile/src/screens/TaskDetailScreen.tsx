@@ -1,15 +1,18 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Alert } from 'react-native';
 import { Text, Button, Icon, useTheme } from '@rneui/themed';
 import { Task, NavigationProps } from '../types';
+import { API_URL, authHeader, refreshToken } from '../services/auth';
 
 type TaskDetailProps = NavigationProps & {
   route: { params: { task: Task } };
 };
 
 export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
-  const { task } = route.params;
+  const { task: initialTask } = route.params;
+  const [task, setTask] = useState<Task>(initialTask);
   const { theme } = useTheme();
+  const [isLoading, setIsLoading] = useState(false);
 
   // Funkcja zwracająca kolor priorytetu
   const getPriorityColor = (priority?: string) => {
@@ -38,6 +41,68 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
       });
     } catch (error) {
       return null;
+    }
+  };
+
+  const toggleTaskStatus = async () => {
+    try {
+      setIsLoading(true);
+
+      // Pobierz token autoryzacyjny
+      const headers = await authHeader();
+
+      const response = await fetch(`${API_URL}/tasks/${task.id}/toggle`, {
+        method: 'PUT',
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        const errorStatus = response.status;
+
+        // Próba odświeżenia tokena jeśli status to 401 (Unauthorized)
+        if (errorStatus === 401) {
+          const newTokens = await refreshToken();
+
+          if (newTokens) {
+            // Próba ponownego wywołania z nowym tokenem
+            const newHeaders = {
+              Authorization: `Bearer ${newTokens.access_token}`,
+            };
+
+            const retryResponse = await fetch(
+              `${API_URL}/tasks/${task.id}/toggle`,
+              {
+                method: 'PUT',
+                headers: newHeaders,
+              }
+            );
+
+            if (retryResponse.ok) {
+              const updatedTask = await retryResponse.json();
+              setTask(updatedTask);
+              // Powrót do ekranu listy z flagą odświeżenia
+              navigation.navigate('TodoList', { refresh: true });
+              return;
+            }
+          }
+        }
+
+        throw new Error(`Błąd aktualizacji zadania: ${errorStatus}`);
+      }
+
+      const updatedTask = await response.json();
+      setTask(updatedTask);
+
+      // Powrót do ekranu listy z flagą odświeżenia
+      navigation.navigate('TodoList', { refresh: true });
+    } catch (error) {
+      console.error('Błąd podczas aktualizacji statusu zadania:', error);
+      Alert.alert(
+        'Błąd',
+        'Nie udało się zaktualizować statusu zadania. Sprawdź połączenie z internetem.'
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -240,12 +305,9 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
                   : theme.colors.success,
             },
           ]}
-          onPress={() => {
-            // Tutaj można dodać obsługę zmiany statusu zadania
-            alert(
-              'Funkcja zmiany statusu zadania nie jest jeszcze zaimplementowana'
-            );
-          }}
+          loading={isLoading}
+          disabled={isLoading}
+          onPress={toggleTaskStatus}
         />
       </View>
     </View>

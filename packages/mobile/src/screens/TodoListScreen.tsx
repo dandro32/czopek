@@ -1,19 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  Alert,
+  TouchableHighlight,
+} from 'react-native';
 import { Text, Button, Icon, useTheme } from '@rneui/themed';
 import { API_URL, authHeader, refreshToken } from '../services/auth';
 import { Task, NavigationProps } from '../types';
 import { TaskCard } from '../components/TaskCard';
+import { SwipeListView } from 'react-native-swipe-list-view';
 
-export function TodoListScreen({ navigation }: NavigationProps) {
+export function TodoListScreen({ navigation, route }: NavigationProps) {
   const { theme } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchTasks();
   }, []);
+
+  // Dodatkowy efekt dla odświeżania po zmianie statusu zadania
+  useEffect(() => {
+    if (route?.params?.refresh) {
+      fetchTasks();
+      // Resetujemy parametr refresh, aby uniknąć wielokrotnego odświeżania
+      navigation.setParams({ refresh: undefined });
+    }
+  }, [route?.params?.refresh]);
 
   const fetchTasks = async () => {
     try {
@@ -82,6 +99,109 @@ export function TodoListScreen({ navigation }: NavigationProps) {
     }
   };
 
+  const toggleTaskStatus = async (taskId: number) => {
+    try {
+      // Pobierz token autoryzacyjny
+      const headers = await authHeader();
+
+      const response = await fetch(`${API_URL}/tasks/${taskId}/toggle`, {
+        method: 'PUT',
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        const errorStatus = response.status;
+
+        // Próba odświeżenia tokena jeśli status to 401 (Unauthorized)
+        if (errorStatus === 401) {
+          const newTokens = await refreshToken();
+
+          if (newTokens) {
+            // Próba ponownego wywołania z nowym tokenem
+            const newHeaders = {
+              Authorization: `Bearer ${newTokens.access_token}`,
+            };
+
+            const retryResponse = await fetch(
+              `${API_URL}/tasks/${taskId}/toggle`,
+              {
+                method: 'PUT',
+                headers: newHeaders,
+              }
+            );
+
+            if (retryResponse.ok) {
+              const updatedTask = await retryResponse.json();
+              // Aktualizacja stanu zadań
+              updateTaskInList(updatedTask);
+              return;
+            }
+          }
+        }
+
+        throw new Error(`Błąd aktualizacji zadania: ${errorStatus}`);
+      }
+
+      const updatedTask = await response.json();
+      // Aktualizacja stanu zadań
+      updateTaskInList(updatedTask);
+    } catch (error) {
+      console.error('Błąd podczas aktualizacji statusu zadania:', error);
+      Alert.alert(
+        'Błąd',
+        'Nie udało się zaktualizować statusu zadania. Sprawdź połączenie z internetem.'
+      );
+    }
+  };
+
+  // Funkcja do aktualizacji zadania w liście
+  const updateTaskInList = (updatedTask: Task) => {
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === updatedTask.id ? updatedTask : task
+      )
+    );
+  };
+
+  // Renderowanie ukrytych akcji dla każdego elementu listy
+  const renderHiddenItem = (data: { item: Task }) => (
+    <View style={styles.rowBack}>
+      <TouchableHighlight
+        style={[
+          styles.backRightBtn,
+          styles.backRightBtnRight,
+          {
+            backgroundColor:
+              data.item.status === 'completed'
+                ? theme.colors.warning
+                : theme.colors.success,
+          },
+        ]}
+        onPress={() => toggleTaskStatus(data.item.id)}
+      >
+        <Icon
+          name={data.item.status === 'completed' ? 'refresh' : 'check'}
+          type="material"
+          color={theme.colors.white}
+          size={25}
+        />
+      </TouchableHighlight>
+    </View>
+  );
+
+  // Renderowanie każdego elementu listy
+  const renderItem = (data: { item: Task }) => (
+    <TaskCard
+      task={data.item}
+      onPress={() => navigation.navigate('TaskDetail', { task: data.item })}
+    />
+  );
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchTasks().then(() => setIsRefreshing(false));
+  };
+
   // Funkcja zwracająca kolor priorytetu
   const getPriorityColor = (priority?: string) => {
     switch (priority) {
@@ -134,7 +254,7 @@ export function TodoListScreen({ navigation }: NavigationProps) {
         Moje zadania
       </Text>
 
-      {loading ? (
+      {loading && !isRefreshing ? (
         <View style={styles.centerContent}>
           <Text style={{ color: theme.colors.grey0, textAlign: 'center' }}>
             Ładowanie zadań...
@@ -189,15 +309,24 @@ export function TodoListScreen({ navigation }: NavigationProps) {
           </Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onPress={() => navigation.navigate('TaskDetail', { task })}
-            />
-          ))}
-        </ScrollView>
+        <SwipeListView
+          data={tasks}
+          renderItem={renderItem}
+          renderHiddenItem={renderHiddenItem}
+          rightOpenValue={-75}
+          previewRowKey={tasks.length > 0 ? tasks[0].id.toString() : '0'}
+          previewOpenValue={-40}
+          previewOpenDelay={1000}
+          showsVerticalScrollIndicator={false}
+          keyExtractor={(item) => item.id.toString()}
+          onRefresh={onRefresh}
+          refreshing={isRefreshing}
+          closeOnRowOpen={true}
+          disableRightSwipe={true}
+          friction={8}
+          tension={80}
+          swipeToOpenPercent={30}
+        />
       )}
     </View>
   );
@@ -213,5 +342,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  rowBack: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: 15,
+  },
+  backRightBtn: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    position: 'absolute',
+    top: 0,
+    width: 75,
+    borderRadius: 10,
+    marginVertical: 5,
+  },
+  backRightBtnRight: {
+    right: 0,
   },
 });

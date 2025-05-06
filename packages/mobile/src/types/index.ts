@@ -10,7 +10,7 @@ export interface Task {
 
 export type RootStackParamList = {
   Home: undefined;
-  TodoList: undefined;
+  TodoList: { refresh?: boolean } | undefined;
   AddTask: { task?: Task } | undefined;
   TaskDetail: { task: Task };
   EditTask: { task: Task };
