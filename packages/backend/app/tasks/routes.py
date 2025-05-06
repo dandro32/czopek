@@ -36,6 +36,7 @@ async def read_tasks(
     db: Session = Depends(get_db),
     current_user: DBUser = Depends(get_current_user)
 ):
+    print(f"[TASKS] Próba pobrania zadań: id={current_user.id}, email={current_user.email}, username={current_user.username}")
     try:
         tasks = get_tasks_with_stats(db, current_user)
         if not tasks.tasks:

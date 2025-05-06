@@ -29,6 +29,16 @@ import {
 } from './src/services/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Definicja typów zadań
+interface Task {
+  id: number;
+  title: string;
+  description?: string;
+  due_date?: string;
+  priority?: string;
+  status?: string;
+}
+
 // Definicja parametrów dla nawigacji
 type RootStackParamList = {
   Home: undefined;
@@ -391,6 +401,48 @@ function HomeScreen({ navigation }: Props) {
 
 function TodoListScreen() {
   const { theme } = useTheme();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      // Pobierz token autoryzacyjny
+      const headers = await authHeader();
+      console.log('Próba pobrania zadań. Nagłówki:', headers);
+
+      const response = await fetch(`${API_URL}/tasks`, {
+        method: 'GET',
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        const errorStatus = response.status;
+        const errorText = await response.text();
+        console.error('Błąd odpowiedzi:', errorStatus, errorText);
+
+        throw new Error(`Błąd pobierania zadań: ${errorStatus}`);
+      }
+
+      const data = await response.json();
+      console.log('Pobrano zadania:', data);
+      setTasks(data.tasks || []);
+    } catch (error) {
+      console.error('Błąd podczas pobierania zadań:', error);
+      setError(
+        'Nie udało się pobrać listy zadań. Sprawdź połączenie z internetem.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View
@@ -402,9 +454,58 @@ function TodoListScreen() {
         },
       ]}
     >
-      <Text h2 style={{ color: theme.colors.primary }}>
+      <Text h2 style={{ color: theme.colors.primary, marginBottom: 20 }}>
         Lista zadań
       </Text>
+
+      {loading ? (
+        <Text style={{ color: theme.colors.grey0 }}>Ładowanie zadań...</Text>
+      ) : error ? (
+        <Text style={{ color: theme.colors.error }}>{error}</Text>
+      ) : tasks.length === 0 ? (
+        <Text style={{ color: theme.colors.grey0 }}>
+          Brak zadań. Dodaj nowe zadanie.
+        </Text>
+      ) : (
+        tasks.map((task) => (
+          <View
+            key={task.id}
+            style={{
+              padding: 15,
+              marginVertical: 8,
+              backgroundColor:
+                theme.mode === 'dark' ? theme.colors.grey0 : theme.colors.grey5,
+              borderRadius: 8,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: 'bold',
+                color:
+                  theme.mode === 'dark'
+                    ? theme.colors.white
+                    : theme.colors.black,
+              }}
+            >
+              {task.title}
+            </Text>
+            {task.description && (
+              <Text
+                style={{
+                  marginTop: 5,
+                  color:
+                    theme.mode === 'dark'
+                      ? theme.colors.grey0
+                      : theme.colors.grey2,
+                }}
+              >
+                {task.description}
+              </Text>
+            )}
+          </View>
+        ))
+      )}
     </View>
   );
 }
