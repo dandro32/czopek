@@ -11,8 +11,9 @@ export interface Task {
 export type RootStackParamList = {
   Home: undefined;
   TodoList: undefined;
-  AddTask: undefined;
+  AddTask: { task?: Task } | undefined;
   TaskDetail: { task: Task };
+  EditTask: { task: Task };
   Login: undefined;
   Register: undefined;
 };

@@ -7,16 +7,7 @@ import { TaskDetailScreen } from '../screens/TaskDetailScreen';
 import { AddTaskScreen } from '../components/AddTaskScreen';
 import { LoginScreen } from '../components/LoginScreen';
 import { RegisterScreen } from '../components/RegisterScreen';
-
-// Definicja parametrów dla nawigacji
-export type RootStackParamList = {
-  Home: undefined;
-  TodoList: undefined;
-  AddTask: undefined;
-  TaskDetail: { task: any };
-  Login: undefined;
-  Register: undefined;
-};
+import { RootStackParamList } from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -130,6 +121,29 @@ export function AppNavigator({
             component={TaskDetailScreen}
             options={({ navigation }) => ({
               title: 'Szczegóły zadania',
+              headerStyle: getHeaderStyle(),
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: 'bold',
+              },
+              headerRight,
+              headerLeft: () => (
+                <Icon
+                  name="arrow-back"
+                  type="material"
+                  color="#fff"
+                  size={28}
+                  containerStyle={{ marginLeft: 10 }}
+                  onPress={() => navigation.goBack()}
+                />
+              ),
+            })}
+          />
+          <Stack.Screen
+            name="EditTask"
+            component={AddTaskScreen}
+            options={({ navigation, route }) => ({
+              title: 'Edytuj zadanie',
               headerStyle: getHeaderStyle(),
               headerTintColor: '#fff',
               headerTitleStyle: {

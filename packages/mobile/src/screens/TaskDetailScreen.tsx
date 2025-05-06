@@ -214,8 +214,8 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
             { backgroundColor: theme.colors.primary },
           ]}
           onPress={() => {
-            // Tutaj można dodać obsługę edycji zadania
-            alert('Funkcja edycji zadania nie jest jeszcze zaimplementowana');
+            // Przejdź do ekranu edycji zadania
+            navigation.navigate('EditTask', { task });
           }}
         />
 

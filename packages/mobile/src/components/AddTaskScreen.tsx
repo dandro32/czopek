@@ -12,21 +12,28 @@ import {
 } from 'react-native';
 import { useTheme, Text, Button, Icon } from '@rneui/themed';
 import DateTimePickerModal, { DateType } from 'react-native-ui-datepicker';
-import { format, setHours, setMinutes, setSeconds } from 'date-fns';
+import { format, setHours, setMinutes, setSeconds, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL, refreshToken } from '../services/auth';
+import { API_URL, refreshToken, authHeader } from '../services/auth';
+import { Task, NavigationProps } from '../types';
 
-type Props = {
-  navigation: any;
+type Props = NavigationProps & {
+  route?: { params?: { task?: Task } };
 };
 
-export function AddTaskScreen({ navigation }: Props) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState<Date | null>(null);
+export function AddTaskScreen({ navigation, route }: Props) {
+  const { task } = (route?.params || {}) as { task?: Task };
+  const isEditMode = !!task;
+
+  const [title, setTitle] = useState(task?.title || '');
+  const [description, setDescription] = useState(task?.description || '');
+  const [dueDate, setDueDate] = useState<Date | null>(
+    task?.due_date ? parseISO(task.due_date) : null
+  );
   const [reminderDate, setReminderDate] = useState<Date | null>(null);
-  const [priority, setPriority] = useState('medium');
+  const [priority, setPriority] = useState(task?.priority || 'medium');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isPickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'due' | 'reminder' | null>(
@@ -154,34 +161,15 @@ export function AddTaskScreen({ navigation }: Props) {
     else setTempMinute(formatted);
   };
 
-  const handleAddTask = async () => {
+  const handleSubmit = async () => {
     if (!title.trim()) {
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
-      // Pobieramy token
-      let token = await AsyncStorage.getItem('@auth_token');
-
-      // Jeśli token nie istnieje, spróbuj odświeżyć
-      if (!token) {
-        const newTokens = await refreshToken();
-        if (newTokens) {
-          token = newTokens.access_token;
-          console.log('Odświeżono token');
-        } else {
-          Alert.alert('Błąd', 'Twoja sesja wygasła. Zaloguj się ponownie.');
-          if (navigation && navigation.reset) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
-          }
-          return;
-        }
-      }
-
-      // Log pełnego żądania do diagnostyki
+      // Przygotowanie danych zadania
       const taskData = {
         title,
         description,
@@ -192,56 +180,60 @@ export function AddTaskScreen({ navigation }: Props) {
         priority,
       };
 
-      console.log('Wysyłanie zadania:', JSON.stringify(taskData));
-      console.log('URL: ', `${API_URL}/tasks/`);
-      console.log('Token: ', token ? token.substring(0, 20) + '...' : 'brak');
+      // Pobieramy token
+      let token = await AsyncStorage.getItem('@auth_token');
+      let headers = await authHeader();
 
-      const response = await fetch(`${API_URL}/tasks/`, {
-        method: 'POST',
+      // Przygotowanie URL i metody w zależności od trybu (dodawanie/edycja)
+      const url = isEditMode
+        ? `${API_URL}/tasks/${task.id}`
+        : `${API_URL}/tasks/`;
+      const method = isEditMode ? 'PUT' : 'POST';
+
+      console.log(
+        `${isEditMode ? 'Aktualizacja' : 'Dodawanie'} zadania:`,
+        JSON.stringify(taskData)
+      );
+      console.log('URL: ', url);
+
+      const response = await fetch(url, {
+        method,
         headers: {
+          ...headers,
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(taskData),
       });
 
-      // Sprawdź dokładny status błędu
-      if (!response.ok) {
-        const errorStatus = response.status;
-        let errorData;
+      // Obsługa błędu 401 (Unauthorized) - próba odświeżenia tokena
+      if (response.status === 401) {
+        console.log('Token wygasł, próba odświeżenia...');
+        const newTokens = await refreshToken();
 
-        try {
-          errorData = await response.text();
-          console.error('Błąd odpowiedzi:', errorStatus, errorData);
-        } catch (parseError) {
-          console.error('Nie można odczytać treści błędu');
-        }
+        if (newTokens) {
+          // Próba ponownego wysłania z nowym tokenem
+          headers = {
+            Authorization: `Bearer ${newTokens.access_token}`,
+            'Content-Type': 'application/json',
+          };
 
-        // Jeśli token wygasł, spróbuj odświeżyć i ponowić żądanie
-        if (errorStatus === 401) {
-          const newTokens = await refreshToken();
-          if (newTokens) {
-            // Ponów żądanie z nowym tokenem
-            const retryResponse = await fetch(`${API_URL}/tasks/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${newTokens.access_token}`,
-              },
-              body: JSON.stringify(taskData),
-            });
+          const retryResponse = await fetch(url, {
+            method,
+            headers,
+            body: JSON.stringify(taskData),
+          });
 
-            if (retryResponse.ok) {
-              navigation.navigate('TodoList');
-              return;
-            } else {
-              console.error(
-                'Błąd po odświeżeniu tokenu:',
-                await retryResponse.text()
-              );
-            }
+          if (!retryResponse.ok) {
+            throw new Error(
+              `Błąd ${isEditMode ? 'aktualizacji' : 'dodawania'} zadania: ${
+                retryResponse.status
+              }`
+            );
           }
 
+          handleSuccess(await retryResponse.json());
+          return;
+        } else {
           // Jeśli nie udało się odświeżyć, przekieruj do ekranu logowania
           Alert.alert(
             'Sesja wygasła',
@@ -262,15 +254,53 @@ export function AddTaskScreen({ navigation }: Props) {
           );
           return;
         }
-
-        throw new Error(`Kod błędu: ${errorStatus}`);
       }
 
-      navigation.navigate('TodoList');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Błąd ${isEditMode ? 'aktualizacji' : 'dodawania'} zadania: ${
+            response.status
+          } - ${errorText}`
+        );
+      }
+
+      handleSuccess(await response.json());
     } catch (error: any) {
-      console.error('Błąd dodawania zadania:', error);
-      Alert.alert('Błąd', `Nie udało się dodać zadania: ${error.message}`);
+      console.error(
+        `Błąd ${isEditMode ? 'aktualizacji' : 'dodawania'} zadania:`,
+        error
+      );
+      Alert.alert(
+        'Błąd',
+        `Nie udało się ${isEditMode ? 'zaktualizować' : 'dodać'} zadania: ${
+          error.message
+        }`
+      );
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleSuccess = (data: any) => {
+    const successMessage = isEditMode
+      ? 'Zadanie zostało zaktualizowane'
+      : 'Zadanie zostało dodane';
+
+    Alert.alert('Sukces', successMessage, [
+      {
+        text: 'OK',
+        onPress: () => {
+          if (isEditMode) {
+            // Wróć do szczegółów zadania z zaktualizowanymi danymi
+            navigation.navigate('TaskDetail', { task: data.task });
+          } else {
+            // Wróć do listy zadań po dodaniu
+            navigation.navigate('TodoList');
+          }
+        },
+      },
+    ]);
   };
 
   const priorityButtons = [
@@ -325,12 +355,19 @@ export function AddTaskScreen({ navigation }: Props) {
       paddingVertical: 12,
       borderRadius: 10,
     },
-    addButton: {
+    submitButton: {
       marginTop: 30,
       borderRadius: 10,
       paddingVertical: 15,
       paddingHorizontal: 20,
+      marginBottom: 15,
+    },
+    cancelButton: {
+      borderRadius: 10,
+      paddingVertical: 15,
+      paddingHorizontal: 20,
       marginBottom: 30,
+      borderWidth: 1,
     },
     modalContainer: {
       flex: 1,
@@ -407,7 +444,7 @@ export function AddTaskScreen({ navigation }: Props) {
       keyboardShouldPersistTaps="handled"
     >
       <Text h2 style={[styles.title, { color: theme.colors.primary }]}>
-        Dodaj nowe zadanie
+        {isEditMode ? 'Edytuj zadanie' : 'Dodaj nowe zadanie'}
       </Text>
 
       <View style={styles.inputGroup}>
@@ -511,16 +548,16 @@ export function AddTaskScreen({ navigation }: Props) {
       </View>
 
       <Button
-        title="Dodaj zadanie"
+        title={isEditMode ? 'Zapisz zmiany' : 'Dodaj zadanie'}
         icon={{
-          name: 'check',
+          name: isEditMode ? 'save' : 'check',
           type: 'material',
           color: theme.colors.white,
           size: 20,
         }}
         iconRight
         buttonStyle={[
-          styles.addButton,
+          styles.submitButton,
           {
             backgroundColor: title.trim()
               ? theme.colors.primary
@@ -528,9 +565,25 @@ export function AddTaskScreen({ navigation }: Props) {
           },
         ]}
         titleStyle={{ color: theme.colors.white }}
-        onPress={handleAddTask}
-        disabled={!title.trim()}
+        onPress={handleSubmit}
+        disabled={!title.trim() || isSubmitting}
+        loading={isSubmitting}
       />
+
+      {isEditMode && (
+        <Button
+          title="Anuluj"
+          type="outline"
+          buttonStyle={[
+            styles.cancelButton,
+            {
+              borderColor: theme.colors.grey3,
+            },
+          ]}
+          titleStyle={{ color: theme.colors.grey1 }}
+          onPress={() => navigation.goBack()}
+        />
+      )}
 
       <Modal
         transparent={true}
