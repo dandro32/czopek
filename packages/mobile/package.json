@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "pixel9": "/Users/danieldrozdzel/Library/Android/sdk/emulator/emulator @Pixel_9 & expo start --android",
+    "pixel9:start": "npx /Users/danieldrozdzel/Library/Android/sdk/emulator/emulator @Pixel_9 & expo start --android"
   },
   "dependencies": {
     "@expo/config-plugins": "~9.0.0",
