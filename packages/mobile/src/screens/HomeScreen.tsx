@@ -4,7 +4,13 @@ import { Text, Button, Icon, useTheme } from '@rneui/themed';
 import { RecordingModal } from '../components/RecordingModal';
 import Voice from '@react-native-voice/voice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrentUser, logout, User, API_URL } from '../services/auth';
+import {
+  getCurrentUser,
+  logout,
+  User,
+  API_URL,
+  getToken,
+} from '../services/auth';
 
 type Props = {
   navigation: any;
@@ -89,6 +95,28 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
+  // Pomocnicza funkcja do wykonania fetch z timeout
+  const fetchWithTimeout = async (
+    url: string,
+    options: RequestInit,
+    timeout: number
+  ) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(id);
+      return response;
+    } catch (error) {
+      clearTimeout(id);
+      throw error;
+    }
+  };
+
   const handleWhisperRecord = async (audioUri: string) => {
     try {
       console.log(`Rozpoczynam przetwarzanie nagrania z URI: ${audioUri}`);
@@ -102,52 +130,96 @@ export function HomeScreen({ navigation }: Props) {
 
       const apiUrl = `${API_URL}/whisper/transcribe`;
       console.log(`Wysyłanie nagrania do: ${apiUrl}`);
-      console.log('FormData:', JSON.stringify(formData));
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }).catch((error) => {
-        console.error('Błąd fetch:', error);
-        throw error;
-      });
+      // Pobierz token autoryzacyjny
+      const token = await getToken();
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Błąd serwera: ${response.status} - ${errorText}`);
-        throw new Error(`Błąd serwera: ${response.status} - ${errorText}`);
+      // Dodaj logikę ponownych prób
+      let retries = 3;
+      let success = false;
+      let lastError = null;
+
+      while (retries > 0 && !success) {
+        try {
+          const response = await fetchWithTimeout(
+            apiUrl,
+            {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+            },
+            30000
+          ); // 30 sekund na przesłanie nagrania
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Błąd serwera: ${response.status} - ${errorText}`);
+            throw new Error(`Błąd serwera: ${response.status} - ${errorText}`);
+          }
+
+          const data = await response.json();
+          if (data.text) {
+            setPrompt(data.text);
+            success = true;
+          } else if (data.error) {
+            throw new Error(data.error);
+          }
+
+          break; // Wyjdź z pętli jeśli nie ma błędów
+        } catch (error) {
+          console.error(`Próba ${4 - retries}/3 nieudana:`, error);
+          lastError = error;
+          retries--;
+
+          if (retries > 0) {
+            // Czekaj 1 sekundę przed kolejną próbą
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
       }
 
-      const data = await response.json();
-      if (data.text) {
-        setPrompt(data.text);
-      } else if (data.error) {
-        console.error('Błąd odpowiedzi API:', data.error);
-        throw new Error(data.error);
+      if (!success) {
+        throw (
+          lastError ||
+          new Error('Nie udało się przetworzyć nagrania po wielu próbach')
+        );
       }
     } catch (error) {
       console.error('Błąd podczas wysyłania nagrania:', error);
 
       // Sprawdź, czy backend działa - prosta pingowa metoda
       try {
-        const healthCheck = await fetch(`${API_URL}/health`).catch((e) => {
-          console.error('Błąd health check:', e);
+        const healthCheck = await fetchWithTimeout(
+          `${API_URL}/health`,
+          {
+            method: 'GET',
+          },
+          5000
+        ).catch((error: Error) => {
+          console.error('Błąd health check:', error);
           return null;
         });
         console.log(
           'Health check status:',
           healthCheck ? healthCheck.status : 'failed'
         );
+
+        if (!healthCheck || !healthCheck.ok) {
+          alert(
+            'Serwer jest niedostępny. Sprawdź połączenie z internetem lub czy serwer jest uruchomiony.'
+          );
+        } else {
+          alert('Wystąpił błąd podczas wysyłania nagrania. Spróbuj ponownie.');
+        }
       } catch (healthError) {
         console.error('Błąd podczas sprawdzania health:', healthError);
+        alert(
+          'Problem z połączeniem sieciowym. Sprawdź, czy masz dostęp do internetu.'
+        );
       }
-
-      alert(
-        'Nie udało się przetworzyć nagrania. Sprawdź połączenie sieciowe i upewnij się, że serwer backend jest uruchomiony.'
-      );
     } finally {
       setIsWhisperModalVisible(false);
     }
