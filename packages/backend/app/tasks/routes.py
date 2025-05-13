@@ -22,8 +22,11 @@ async def create_new_task(
 ):
     print(f"[TASKS] Autoryzowano użytkownika: id={current_user.id}, username={current_user.username}")
     try:
-        new_task = await create_task(db, task, current_user)
-        return new_task 
+        task_data = await create_task(db, task, current_user)
+        # Dodaj id jako string z _id
+        task_data["id"] = str(task_data["_id"])
+        # Zwróć Task model Pydantic
+        return Task(**task_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Nie udało się utworzyć zadania: {e}")
 
@@ -34,8 +37,7 @@ async def read_tasks(
 ):
     print(f"[TASKS] Pobieranie zadań dla: id={current_user.id}, username={current_user.username}")
     try:
-        tasks_list = await get_user_tasks(db, current_user.id)
-        return tasks_list
+        return await get_user_tasks(db, current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Nie udało się pobrać zadań: {e}")
 
@@ -46,10 +48,11 @@ async def read_task(
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:
-        task = await get_task(db, task_id, current_user.id)
-        if task is None:
+        task_data = await get_task(db, task_id, current_user.id)
+        if task_data is None:
             raise HTTPException(status_code=404, detail="Zadanie nie znalezione")
-        return task
+        # Upewnijmy się, że dane są zgodne z modelem Task
+        return Task(**task_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Nie udało się pobrać zadania: {e}")
 
@@ -61,10 +64,11 @@ async def update_task_endpoint(
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:
-        updated_task = await update_task(db, task_id, task_update, current_user.id)
-        if updated_task is None:
+        task_data = await update_task(db, task_id, task_update, current_user.id)
+        if task_data is None:
             raise HTTPException(status_code=404, detail="Zadanie nie znalezione lub brak uprawnień")
-        return updated_task
+        # Upewnijmy się, że dane są zgodne z modelem Task
+        return Task(**task_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Nie udało się zaktualizować zadania: {e}")
 
