@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pymongo.database import Database
-from database import get_db
+from database import async_get_db
 from app.auth.routes import get_current_user
 from app.auth.models import UserInDB
 from .models import CalendarEvent, CalendarEventCreate, TaskFromEvent, CalendarEventList, CalendarCredentials
@@ -27,7 +27,7 @@ async def auth_calendar():
 async def callback(
     code: str, 
     state: str, 
-    db: Annotated[Database, Depends(get_db)],
+    db: Annotated[Database, Depends(async_get_db)],
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     flow = create_flow()
@@ -39,7 +39,7 @@ async def callback(
 
 @router.get("/events", response_model=CalendarEventList)
 async def get_events(
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
@@ -63,7 +63,7 @@ async def get_events(
 @router.post("/events", response_model=CalendarEvent)
 async def create_calendar_event(
     event: CalendarEventCreate,
-    db: Annotated[Database, Depends(get_db)],
+    db: Annotated[Database, Depends(async_get_db)],
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
@@ -103,7 +103,7 @@ async def create_calendar_event(
 async def convert_event_to_task(
     event_id: str,
     task_data: TaskFromEvent,
-    db: Annotated[Database, Depends(get_db)],
+    db: Annotated[Database, Depends(async_get_db)],
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     task = TaskCreate(
@@ -118,7 +118,7 @@ async def convert_event_to_task(
 
 @router.get("/events/rag-context")
 async def get_events_rag_context(
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
@@ -142,7 +142,7 @@ async def get_events_rag_context(
 
 @router.get("/status")
 async def get_calendar_status(
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})

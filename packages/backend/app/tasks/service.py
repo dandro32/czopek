@@ -11,10 +11,10 @@ from typing import List, Tuple, Dict
 
 logger = logging.getLogger(__name__)
 
-async def create_task(db: AsyncIOMotorDatabase, task: TaskCreate, user_id: ObjectId):
-    logger.info(f"Tworzenie nowego zadania dla użytkownika {user_id}")
+async def create_task(db: AsyncIOMotorDatabase, task: TaskCreate, user):
+    logger.info(f"Tworzenie nowego zadania dla użytkownika {user.id}")
     task_data = task.dict()
-    task_data["user_id"] = user_id
+    task_data["user_id"] = user.id
     
     result = await db.tasks.insert_one(task_data)
     
@@ -22,34 +22,40 @@ async def create_task(db: AsyncIOMotorDatabase, task: TaskCreate, user_id: Objec
     task_data["_id"] = result.inserted_id
     return task_data
 
-async def get_user_tasks(db: AsyncIOMotorDatabase, user_id: ObjectId) -> List[dict]:
+async def get_user_tasks(db: AsyncIOMotorDatabase, user_id: str) -> List[dict]:
     logger.info(f"Pobieranie zadań dla użytkownika {user_id}")
     cursor = db.tasks.find({"user_id": user_id}).sort("due_date", 1)
     tasks = await cursor.to_list(length=None)
     logger.info(f"Znaleziono {len(tasks)} zadań")
     return tasks
 
-async def get_task(db: AsyncIOMotorDatabase, task_id: ObjectId, user_id: ObjectId):
-    return await db.tasks.find_one({"_id": task_id, "user_id": user_id})
+async def get_task(db: AsyncIOMotorDatabase, task_id: str, user_id: str):
+    # Konwertuj task_id na ObjectId dla MongoDB
+    task_id_obj = ObjectId(task_id) if isinstance(task_id, str) else task_id
+    return await db.tasks.find_one({"_id": task_id_obj, "user_id": user_id})
 
-async def update_task(db: AsyncIOMotorDatabase, task_id: ObjectId, task: TaskCreate, user_id: ObjectId):
+async def update_task(db: AsyncIOMotorDatabase, task_id: str, task: TaskCreate, user_id: str):
+    # Konwertuj task_id na ObjectId dla MongoDB
+    task_id_obj = ObjectId(task_id) if isinstance(task_id, str) else task_id
     task_data = {k: v for k, v in task.dict(exclude_unset=True).items()}
     result = await db.tasks.update_one(
-        {"_id": task_id, "user_id": user_id},
+        {"_id": task_id_obj, "user_id": user_id},
         {"$set": task_data}
     )
     
     if result.modified_count > 0:
-        return await get_task(db, task_id, user_id)
+        return await get_task(db, task_id_obj, user_id)
     return None
 
-async def delete_task(db: AsyncIOMotorDatabase, task_id: ObjectId, user_id: ObjectId):
-    task = await get_task(db, task_id, user_id)
+async def delete_task(db: AsyncIOMotorDatabase, task_id: str, user_id: str):
+    # Konwertuj task_id na ObjectId dla MongoDB
+    task_id_obj = ObjectId(task_id) if isinstance(task_id, str) else task_id
+    task = await get_task(db, task_id_obj, user_id)
     if task:
-        await db.tasks.delete_one({"_id": task_id, "user_id": user_id})
+        await db.tasks.delete_one({"_id": task_id_obj, "user_id": user_id})
     return task
 
-async def import_calendar_events(db: AsyncIOMotorDatabase, user_id: ObjectId) -> Tuple[List[dict], bool]:
+async def import_calendar_events(db: AsyncIOMotorDatabase, user_id: str) -> Tuple[List[dict], bool]:
     logger.info(f"Próba importu wydarzeń z kalendarza dla użytkownika {user_id}")
     creds = await db.calendar_credentials.find_one({"user_id": user_id})
     if not creds:
@@ -91,7 +97,10 @@ async def import_calendar_events(db: AsyncIOMotorDatabase, user_id: ObjectId) ->
                     calendar_event_id=event.id,
                     status="pending"
                 )
-                await create_task(db, task, user_id)
+                # Tworzymy słownik zadania bezpośrednio
+                task_data = task.dict()
+                task_data["user_id"] = user_id
+                await db.tasks.insert_one(task_data)
             else:
                 logger.info(f"Zadanie dla wydarzenia {event.id} już istnieje")
         
@@ -149,7 +158,7 @@ def get_task_statistics(tasks: List[dict]) -> dict:
         "completed_count": completed_count
     }
 
-async def get_tasks_with_stats(db: AsyncIOMotorDatabase, user_id: ObjectId) -> TaskList:
+async def get_tasks_with_stats(db: AsyncIOMotorDatabase, user_id: str) -> TaskList:
     logger.info(f"Pobieranie zadań ze statystykami dla użytkownika {user_id}")
     try:
         tasks, calendar_imported = await import_calendar_events(db, user_id)
@@ -166,7 +175,7 @@ async def get_tasks_with_stats(db: AsyncIOMotorDatabase, user_id: ObjectId) -> T
         raise
 
 # Wersje synchroniczne dla skryptu migracji i narzędzi administracyjnych
-def sync_create_task(db: Database, task: dict, user_id: ObjectId):
+def sync_create_task(db: Database, task: dict, user_id: str):
     task_data = task.copy()
     task_data["user_id"] = user_id
     
@@ -175,5 +184,5 @@ def sync_create_task(db: Database, task: dict, user_id: ObjectId):
     task_data["_id"] = result.inserted_id
     return task_data
 
-def sync_get_user_tasks(db: Database, user_id: ObjectId) -> List[dict]:
+def sync_get_user_tasks(db: Database, user_id: str) -> List[dict]:
     return list(db.tasks.find({"user_id": user_id}).sort("due_date", 1)) 

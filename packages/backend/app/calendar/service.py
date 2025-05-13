@@ -45,17 +45,22 @@ async def save_credentials(db: Database, user: UserInDB, credentials: Credential
         'scopes': credentials.scopes
     }
 
+    # Upewnij się, że mamy poprawne ID użytkownika
+    user_id = user.id
+    if not user_id:
+        raise ValueError("User ID is required to save calendar credentials")
+
     db_credentials_data = CalendarCredentials(
-        user_id=user.id,
+        user_id=user_id,
         **credentials_dict
     )
 
     await db.calendar_credentials.update_one(
-        {"user_id": user.id},
+        {"user_id": user_id},
         {"$set": db_credentials_data.dict(exclude={'id'}, exclude_none=True)},
         upsert=True
     )
-    saved_credentials = await db.calendar_credentials.find_one({"user_id": user.id})
+    saved_credentials = await db.calendar_credentials.find_one({"user_id": user_id})
     if saved_credentials:
         return CalendarCredentials(**saved_credentials)
     return None

@@ -42,7 +42,7 @@ class TaskUpdate(TaskBase):
 
 class Task(TaskBase):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    user_id: PyObjectId # Reference to the User's ObjectId
+    user_id: str  # String zamiast PyObjectId dla zgodności z UserInDB.id
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

@@ -21,8 +21,17 @@ class User(UserBase):
             ObjectId: str # Assuming you might use ObjectId later
         }
 
-class UserInDB(User):
+class UserInDB(UserBase):
+    id: Optional[str] = None  # Opcjonalne, żeby można było tworzyć bez ID
     hashed_password: str
+    is_active: bool = True
+    
+    class Config:
+        orm_mode = True
+        allow_population_by_field_name = True
+        json_encoders = {
+            ObjectId: str
+        }
 
 class UserLogin(BaseModel):
     username: str

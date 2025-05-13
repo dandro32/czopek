@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo.database import Database
-from database import get_db
+from database import async_get_db
 from app.auth.routes import get_current_user
 from app.auth.models import UserInDB
 from .models import Task, TaskCreate, TaskList, TaskUpdate
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("", response_model=Task)
 async def create_new_task(
     task: TaskCreate, 
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     print(f"[TASKS] Autoryzowano użytkownika: id={current_user.id}, username={current_user.username}")
@@ -29,7 +29,7 @@ async def create_new_task(
 
 @router.get("", response_model=TaskList)
 async def read_tasks(
-    db: Annotated[Database, Depends(get_db)],
+    db: Annotated[Database, Depends(async_get_db)],
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     print(f"[TASKS] Pobieranie zadań dla: id={current_user.id}, username={current_user.username}")
@@ -42,7 +42,7 @@ async def read_tasks(
 @router.get("/{task_id}", response_model=Task)
 async def read_task(
     task_id: str,
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:
@@ -57,7 +57,7 @@ async def read_task(
 async def update_task_endpoint(
     task_id: str,
     task_update: TaskUpdate,
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:
@@ -71,7 +71,7 @@ async def update_task_endpoint(
 @router.delete("/{task_id}", response_model=SuccessResponse)
 async def delete_task_endpoint(
     task_id: str,
-    db: Annotated[Database, Depends(get_db)], 
+    db: Annotated[Database, Depends(async_get_db)], 
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:

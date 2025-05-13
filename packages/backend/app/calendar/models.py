@@ -19,7 +19,7 @@ class PyObjectId(ObjectId):
 
 class CalendarCredentials(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    user_id: PyObjectId # Reference to the User's ObjectId
+    user_id: str  # Używamy stringa zamiast PyObjectId dla zgodności z UserInDB.id
     token: str # Consider encrypting this in a real application
     refresh_token: Optional[str] = None # Consider encrypting this
     token_uri: Optional[str] = None

@@ -7,10 +7,14 @@ import {
   TouchableHighlight,
 } from 'react-native';
 import { Text, Button, Icon, useTheme } from '@rneui/themed';
-import { API_URL, authHeader, refreshToken } from '../services/auth';
-import { Task, NavigationProps } from '../types';
+import { NavigationProps } from '../types';
 import { TaskCard } from '../components/TaskCard';
 import { SwipeListView } from 'react-native-swipe-list-view';
+import {
+  fetchTasks,
+  toggleTaskStatus as toggleTaskStatusService,
+  Task,
+} from '../services/tasks';
 
 export function TodoListScreen({ navigation, route }: NavigationProps) {
   const { theme } = useTheme();
@@ -20,73 +24,26 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchTasks();
+    fetchTasksData();
   }, []);
 
   // Dodatkowy efekt dla odświeżania po zmianie statusu zadania
   useEffect(() => {
     if (route?.params?.refresh) {
-      fetchTasks();
+      fetchTasksData();
       // Resetujemy parametr refresh, aby uniknąć wielokrotnego odświeżania
       navigation.setParams({ refresh: undefined });
     }
   }, [route?.params?.refresh]);
 
-  const fetchTasks = async () => {
+  const fetchTasksData = async () => {
     try {
       setLoading(true);
       setError('');
 
-      // Pobierz token autoryzacyjny
-      const headers = await authHeader();
-      console.log('Próba pobrania zadań. Nagłówki:', headers);
+      console.log('Pobieranie listy zadań...');
+      const data = await fetchTasks();
 
-      const response = await fetch(`${API_URL}/tasks`, {
-        method: 'GET',
-        headers: headers,
-      });
-
-      if (!response.ok) {
-        const errorStatus = response.status;
-        const errorText = await response.text();
-        console.error('Błąd odpowiedzi:', errorStatus, errorText);
-
-        // Próba odświeżenia tokena jeśli status to 401 (Unauthorized)
-        if (errorStatus === 401) {
-          console.log('Token wygasł, próba odświeżenia...');
-          const newTokens = await refreshToken();
-
-          if (newTokens) {
-            console.log('Token odświeżony, ponowna próba pobrania zadań');
-            // Próba ponownego pobrania z nowym tokenem
-            const newHeaders = {
-              Authorization: `Bearer ${newTokens.access_token}`,
-            };
-
-            const retryResponse = await fetch(`${API_URL}/tasks`, {
-              method: 'GET',
-              headers: newHeaders,
-            });
-
-            if (retryResponse.ok) {
-              const data = await retryResponse.json();
-              console.log('Pobrano zadania po odświeżeniu tokena:', data);
-              setTasks(data.tasks || []);
-              setLoading(false);
-              return;
-            } else {
-              console.error(
-                'Błąd po odświeżeniu tokena:',
-                await retryResponse.text()
-              );
-            }
-          }
-        }
-
-        throw new Error(`Błąd pobierania zadań: ${errorStatus}`);
-      }
-
-      const data = await response.json();
       console.log('Pobrano zadania:', data);
       setTasks(data.tasks || []);
     } catch (error) {
@@ -99,50 +56,9 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
     }
   };
 
-  const toggleTaskStatus = async (taskId: number) => {
+  const toggleTaskStatus = async (taskId: string, currentStatus: string) => {
     try {
-      // Pobierz token autoryzacyjny
-      const headers = await authHeader();
-
-      const response = await fetch(`${API_URL}/tasks/${taskId}/toggle`, {
-        method: 'PUT',
-        headers: headers,
-      });
-
-      if (!response.ok) {
-        const errorStatus = response.status;
-
-        // Próba odświeżenia tokena jeśli status to 401 (Unauthorized)
-        if (errorStatus === 401) {
-          const newTokens = await refreshToken();
-
-          if (newTokens) {
-            // Próba ponownego wywołania z nowym tokenem
-            const newHeaders = {
-              Authorization: `Bearer ${newTokens.access_token}`,
-            };
-
-            const retryResponse = await fetch(
-              `${API_URL}/tasks/${taskId}/toggle`,
-              {
-                method: 'PUT',
-                headers: newHeaders,
-              }
-            );
-
-            if (retryResponse.ok) {
-              const updatedTask = await retryResponse.json();
-              // Aktualizacja stanu zadań
-              updateTaskInList(updatedTask);
-              return;
-            }
-          }
-        }
-
-        throw new Error(`Błąd aktualizacji zadania: ${errorStatus}`);
-      }
-
-      const updatedTask = await response.json();
+      const updatedTask = await toggleTaskStatusService(taskId, currentStatus);
       // Aktualizacja stanu zadań
       updateTaskInList(updatedTask);
     } catch (error) {
@@ -177,7 +93,7 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
                 : theme.colors.success,
           },
         ]}
-        onPress={() => toggleTaskStatus(data.item.id)}
+        onPress={() => toggleTaskStatus(data.item.id, data.item.status)}
       >
         <Icon
           name={data.item.status === 'completed' ? 'refresh' : 'check'}
@@ -199,7 +115,7 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
 
   const onRefresh = () => {
     setIsRefreshing(true);
-    fetchTasks().then(() => setIsRefreshing(false));
+    fetchTasksData().then(() => setIsRefreshing(false));
   };
 
   // Funkcja zwracająca kolor priorytetu
@@ -270,7 +186,7 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
             type="outline"
             buttonStyle={{ marginTop: 15, borderColor: theme.colors.primary }}
             titleStyle={{ color: theme.colors.primary }}
-            onPress={fetchTasks}
+            onPress={fetchTasksData}
             icon={{
               name: 'refresh',
               type: 'material',

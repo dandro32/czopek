@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 from pymongo.database import Database
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 load_dotenv()
 
@@ -31,6 +32,10 @@ async def get_db():
         yield async_db
     finally:
         pass
+
+# Nowa funkcja do użycia z Depends() w FastAPI
+async def async_get_db():
+    return async_db
 
 def get_sync_db() -> Database:
     return db

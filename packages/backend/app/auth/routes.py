@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.database import Database
-from database import get_db, get_sync_db # Import async and sync db getters
+from database import async_get_db, get_sync_db # Import nowej funkcji async_get_db
 from .models import User, UserCreate, UserLogin, RefreshToken, UserInDB # Import UserInDB
 from security import (
     Token, verify_password, get_password_hash, create_access_token,
@@ -16,13 +16,15 @@ security = HTTPBearer()
 async def get_user_from_db(db: Database, username: str) -> UserInDB | None:
     user_data = await db.users.find_one({"username": username})
     if user_data:
-        user_data["id"] = str(user_data["_id"]) # Map _id to id
-        return UserInDB(**user_data)
+        # Dodaj ID jako string z _id
+        user_data_copy = dict(user_data)
+        user_data_copy["id"] = str(user_data["_id"])
+        return UserInDB(**user_data_copy)
     return None
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Security(security)], 
-    db: Annotated[Database, Depends(get_db)]
+    db: Annotated[Database, Depends(async_get_db)]
 ) -> UserInDB:
     token_data = verify_token(credentials.credentials)
     if token_data is None or token_data.username is None: # Check for username
@@ -39,7 +41,7 @@ async def get_current_user(
     return user
 
 @router.post("/register", response_model=User)
-async def register(user: UserCreate, db: Annotated[Database, Depends(get_db)]):
+async def register(user: UserCreate, db: Annotated[Database, Depends(async_get_db)]):
     existing_user = await db.users.find_one({"username": user.username})
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nazwa użytkownika jest już zajęta")
@@ -53,7 +55,12 @@ async def register(user: UserCreate, db: Annotated[Database, Depends(get_db)]):
     
     user_db_data = UserInDB(**user_dict, hashed_password=hashed_password, is_active=True)
     
-    insert_result = await db.users.insert_one(user_db_data.dict(exclude={'id'})) # Exclude 'id' which is generated
+    # Upewnij się, że usuwamy id jeśli jest None przed wstawieniem do MongoDB
+    user_data_to_insert = user_db_data.dict(exclude_none=True)
+    if "id" in user_data_to_insert:
+        user_data_to_insert.pop("id")
+    
+    insert_result = await db.users.insert_one(user_data_to_insert)
     
     created_user = await db.users.find_one({"_id": insert_result.inserted_id})
     if created_user:
@@ -65,7 +72,7 @@ async def register(user: UserCreate, db: Annotated[Database, Depends(get_db)]):
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Annotated[Database, Depends(get_db)]):
+async def login(user_data: UserLogin, db: Annotated[Database, Depends(async_get_db)]):
     user = await get_user_from_db(db, user_data.username)
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
@@ -86,7 +93,7 @@ async def login(user_data: UserLogin, db: Annotated[Database, Depends(get_db)]):
     }
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token_endpoint(token: RefreshToken, db: Annotated[Database, Depends(get_db)]):
+async def refresh_token_endpoint(token: RefreshToken, db: Annotated[Database, Depends(async_get_db)]):
     token_data = verify_token(token.refresh_token)
     if token_data is None or token_data.username is None:
         raise HTTPException(
@@ -120,5 +127,10 @@ async def logout(current_user: Annotated[UserInDB, Depends(get_current_user)]):
 
 @router.get("/me", response_model=User)
 async def get_current_user_info(current_user: Annotated[UserInDB, Depends(get_current_user)]):
-    # Return the User model, not UserInDB which includes the hash
-    return User(**current_user.dict()) 
+    # Używamy pydantic, aby przekonwertować UserInDB na User, pomijając hashed_password
+    return User(
+        id=current_user.id,
+        email=current_user.email,
+        username=current_user.username,
+        is_active=current_user.is_active
+    ) 

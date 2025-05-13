@@ -13,9 +13,34 @@ const AUTH_TOKEN_KEY = '@auth_token';
 const REFRESH_TOKEN_KEY = '@refresh_token';
 const USER_DATA_KEY = '@user_data';
 
+// Dodana funkcja do obsługi błędów API
+export const handleApiError = async (error: any) => {
+  console.error('API error:', error);
+
+  // Sprawdź, czy błąd dotyczy autoryzacji (401)
+  if (error.response && error.response.status === 401) {
+    console.log('Błąd autoryzacji, próba odświeżenia tokenu...');
+
+    // Spróbuj odświeżyć token
+    const newTokens = await refreshToken();
+
+    // Jeśli odświeżenie się nie powiedzie, wyczyść tokeny i zwróć false
+    if (!newTokens) {
+      console.log('Odświeżenie tokenu nieudane, wylogowuję...');
+      await clearTokens();
+      return false;
+    }
+
+    return true; // Token odświeżony pomyślnie
+  }
+
+  // Inny rodzaj błędu
+  return null;
+};
+
 // Interfejsy
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   is_active: boolean;
@@ -161,13 +186,43 @@ export const clearTokens = async (): Promise<void> => {
   await AsyncStorage.removeItem(USER_DATA_KEY);
 };
 
+// Ulepszona funkcja isAuthenticated, która sprawdza również ważność tokenu
 export const isAuthenticated = async (): Promise<boolean> => {
-  const token = await getToken();
-  return !!token;
+  try {
+    const token = await getToken();
+    if (!token) return false;
+
+    // Opcjonalnie: Sprawdź, czy token jest ważny, robiąc lekkie zapytanie do API
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        // Token wygasł lub jest nieprawidłowy, spróbuj odświeżyć
+        console.log('Token może być nieważny, próba odświeżenia...');
+        const newTokens = await refreshToken();
+        return !!newTokens; // true, jeśli odświeżenie się powiodło
+      }
+
+      return true; // Token jest ważny
+    } catch (error) {
+      console.error('Błąd sprawdzania tokenu:', error);
+
+      // Próbujemy odświeżyć token jako ostatnią deskę ratunku
+      const newTokens = await refreshToken();
+      return !!newTokens;
+    }
+  } catch (error) {
+    console.error('Błąd sprawdzania autentykacji:', error);
+    return false;
+  }
 };
 
 // Funkcja do dodawania nagłówka autoryzacji do żądań
-export const authHeader = async (): Promise<HeadersInit> => {
+export const authHeader = async (): Promise<Record<string, string>> => {
   const token = await getToken();
 
   if (token) {
@@ -207,7 +262,7 @@ export const fetchAndStoreUserData = async (
     // Jeśli endpoint /auth/me nie zadziałał, użyjemy mocka użytkownika
     console.log('Używam rozwiązania awaryjnego - hardcoded dane użytkownika');
     const mockUser: User = {
-      id: 1,
+      id: '1',
       username: 'Zalogowany użytkownik',
       email: 'user@example.com',
       is_active: true,
