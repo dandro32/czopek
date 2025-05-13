@@ -64,12 +64,18 @@ async def update_task_endpoint(
     current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     try:
+        print(f"[TASKS] Aktualizacja zadania: {task_id}, dane: {task_update.dict()}")
         task_data = await update_task(db, task_id, task_update, current_user.id)
         if task_data is None:
             raise HTTPException(status_code=404, detail="Zadanie nie znalezione lub brak uprawnień")
         # Upewnijmy się, że dane są zgodne z modelem Task
         return Task(**task_data)
+    except ValueError as e:
+        # Błędy walidacji
+        print(f"[TASKS] Błąd walidacji podczas aktualizacji zadania: {e}")
+        raise HTTPException(status_code=422, detail=f"Błąd walidacji danych: {str(e)}")
     except Exception as e:
+        print(f"[TASKS] Błąd podczas aktualizacji zadania: {e}")
         raise HTTPException(status_code=500, detail=f"Nie udało się zaktualizować zadania: {e}")
 
 @router.delete("/{task_id}", response_model=SuccessResponse)

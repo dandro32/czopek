@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.database import Database
-from .models import TaskCreate, TaskList, Task
+from .models import TaskCreate, TaskList, Task, TaskUpdate
 from bson import ObjectId
 from app.calendar.models import CalendarCredentials
 from app.calendar.service import get_calendar_service, get_upcoming_events
@@ -111,23 +111,46 @@ async def get_task(db: AsyncIOMotorDatabase, task_id: str, user_id: str):
         return task_dict
     return None
 
-async def update_task(db: AsyncIOMotorDatabase, task_id: str, task: TaskCreate, user_id: str):
+async def update_task(db: AsyncIOMotorDatabase, task_id: str, task: TaskUpdate, user_id: str):
     # Konwertuj task_id na ObjectId dla MongoDB
     task_id_obj = ObjectId(task_id) if isinstance(task_id, str) else task_id
-    task_data = {k: v for k, v in task.dict(exclude_unset=True).items()}
+    
+    # Dodanie logowania i diagnostyki
+    logger.info(f"Aktualizacja zadania {task_id} dla użytkownika {user_id}")
+    logger.info(f"Dane aktualizacji: {task.dict(exclude_unset=True)}")
+    
+    # Sprawdź czy zadanie istnieje przed aktualizacją
+    existing_task = await db.tasks.find_one({"_id": task_id_obj, "user_id": user_id})
+    if not existing_task:
+        logger.warning(f"Nie znaleziono zadania {task_id} dla użytkownika {user_id}")
+        return None
+    
+    # Przygotuj dane do aktualizacji
+    task_data = {k: v for k, v in task.dict(exclude_unset=True).items() if v is not None}
+    logger.info(f"Dane po filtracji: {task_data}")
     
     # Dodaj pole aktualizacji
     task_data["updated_at"] = datetime.utcnow()
     
-    result = await db.tasks.update_one(
-        {"_id": task_id_obj, "user_id": user_id},
-        {"$set": task_data}
-    )
-    
-    if result.modified_count > 0:
-        # Pobierz zaktualizowane zadanie przez funkcję get_task
-        return await get_task(db, task_id_obj, user_id)
-    return None
+    try:
+        result = await db.tasks.update_one(
+            {"_id": task_id_obj, "user_id": user_id},
+            {"$set": task_data}
+        )
+        
+        logger.info(f"Wynik aktualizacji: modified_count={result.modified_count}")
+        
+        if result.modified_count > 0 or result.matched_count > 0:
+            # Pobierz zaktualizowane zadanie przez funkcję get_task
+            updated_task = await get_task(db, task_id_obj, user_id)
+            logger.info(f"Zaktualizowane zadanie: {updated_task}")
+            return updated_task
+        else:
+            logger.warning(f"Nie zaktualizowano zadania {task_id}")
+            return await get_task(db, task_id_obj, user_id)  # Zwróć istniejące zadanie
+    except Exception as e:
+        logger.error(f"Błąd podczas aktualizacji zadania {task_id}: {str(e)}")
+        raise
 
 async def delete_task(db: AsyncIOMotorDatabase, task_id: str, user_id: str):
     # Konwertuj task_id na ObjectId dla MongoDB

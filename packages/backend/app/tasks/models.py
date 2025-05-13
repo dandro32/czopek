@@ -32,13 +32,22 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     pass
 
-class TaskUpdate(TaskBase):
+class TaskUpdate(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
     priority: Optional[str] = None
+    source: Optional[str] = None
+    calendar_event_id: Optional[str] = None
     status: Optional[str] = None
-    # Allow partial updates
+    reminder_date: Optional[datetime] = None
+
     class Config:
-        extra = 'forbid' # Or 'ignore' if you want to silently ignore extra fields
+        extra = 'forbid'
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: dt.isoformat()
+        }
 
 class Task(TaskBase):
     id: str  # Zmiana z PyObjectId na str

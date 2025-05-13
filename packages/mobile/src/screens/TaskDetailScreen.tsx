@@ -1,20 +1,120 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Text, Button, Icon, useTheme } from '@rneui/themed';
+import { useFocusEffect } from '@react-navigation/native';
 import { Task, NavigationProps } from '../types';
 import { API_URL, authHeader, refreshToken } from '../services/auth';
 
 type TaskDetailProps = NavigationProps & {
-  route: { params: { task: Task } };
+  route: { params: { task: Task; refresh?: boolean } };
 };
 
 export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
-  const { task: initialTask } = route.params;
-  const [task, setTask] = useState<Task>(initialTask);
+  const initialTaskId = route.params?.task?.id;
+  const [task, setTask] = useState<Task | undefined>(route.params?.task);
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingDetails, setIsFetchingDetails] = useState(false);
 
-  // Funkcja zwracająca kolor priorytetu
+  const fetchTaskDetails = useCallback(async () => {
+    if (!initialTaskId) {
+      Alert.alert('Błąd', 'Nie można załadować szczegółów zadania - brak ID.');
+      setTask(undefined);
+      return;
+    }
+
+    console.log(
+      `[TaskDetailScreen] Odświeżanie danych dla zadania ID: ${initialTaskId}`
+    );
+    setIsFetchingDetails(true);
+    try {
+      const headers = await authHeader();
+      const response = await fetch(`${API_URL}/tasks/${initialTaskId}`, {
+        method: 'GET',
+        headers: headers,
+      });
+
+      if (response.status === 401) {
+        const newTokens = await refreshToken();
+        if (newTokens) {
+          const newHeaders = {
+            Authorization: `Bearer ${newTokens.access_token}`,
+          };
+          const retryResponse = await fetch(
+            `${API_URL}/tasks/${initialTaskId}`,
+            {
+              method: 'GET',
+              headers: newHeaders,
+            }
+          );
+          if (retryResponse.ok) {
+            const updatedTaskData = await retryResponse.json();
+            setTask(updatedTaskData);
+          } else {
+            throw new Error(
+              `Błąd pobierania zadania po odświeżeniu tokena: ${retryResponse.status}`
+            );
+          }
+        } else {
+          throw new Error('Nie udało się odświeżyć tokena.');
+        }
+      } else if (response.ok) {
+        const updatedTaskData = await response.json();
+        setTask(updatedTaskData);
+      } else {
+        throw new Error(`Błąd pobierania zadania: ${response.status}`);
+      }
+    } catch (error) {
+      console.error(
+        '[TaskDetailScreen] Błąd podczas pobierania szczegółów zadania:',
+        error
+      );
+      Alert.alert('Błąd', 'Nie udało się załadować aktualnych danych zadania.');
+    } finally {
+      setIsFetchingDetails(false);
+    }
+  }, [initialTaskId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTaskDetails();
+      return () => {};
+    }, [fetchTaskDetails])
+  );
+
+  if (
+    (isFetchingDetails && (!task || task.id !== initialTaskId)) ||
+    (!task && initialTaskId)
+  ) {
+    return (
+      <View style={styles.centeredLoading}>
+        <ActivityIndicator size="large" />
+        <Text>Ładowanie danych zadania...</Text>
+      </View>
+    );
+  }
+
+  if (!initialTaskId) {
+    return (
+      <View style={styles.centeredLoading}>
+        <Text>Nie można wyświetlić zadania. Brak ID zadania.</Text>
+        <Button title="Wróć" onPress={() => navigation.goBack()} />
+      </View>
+    );
+  }
+
+  if (!task) {
+    return (
+      <View style={styles.centeredLoading}>
+        <Text>
+          Wystąpił błąd podczas ładowania danych zadania. Spróbuj ponownie.
+        </Text>
+        <Button title="Odśwież" onPress={fetchTaskDetails} />
+        <Button title="Wróć" onPress={() => navigation.goBack()} />
+      </View>
+    );
+  }
+
   const getPriorityColor = (priority?: string) => {
     switch (priority) {
       case 'high':
@@ -28,7 +128,6 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
     }
   };
 
-  // Funkcja formatująca datę
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
 
@@ -48,10 +147,8 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
     try {
       setIsLoading(true);
 
-      // Pobierz token autoryzacyjny
       const headers = await authHeader();
-
-      const response = await fetch(`${API_URL}/tasks/${task.id}/toggle`, {
+      const response = await fetch(`${API_URL}/tasks/${task!.id}/toggle`, {
         method: 'PUT',
         headers: headers,
       });
@@ -59,18 +156,16 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
       if (!response.ok) {
         const errorStatus = response.status;
 
-        // Próba odświeżenia tokena jeśli status to 401 (Unauthorized)
         if (errorStatus === 401) {
           const newTokens = await refreshToken();
 
           if (newTokens) {
-            // Próba ponownego wywołania z nowym tokenem
             const newHeaders = {
               Authorization: `Bearer ${newTokens.access_token}`,
             };
 
             const retryResponse = await fetch(
-              `${API_URL}/tasks/${task.id}/toggle`,
+              `${API_URL}/tasks/${task!.id}/toggle`,
               {
                 method: 'PUT',
                 headers: newHeaders,
@@ -80,7 +175,6 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
             if (retryResponse.ok) {
               const updatedTask = await retryResponse.json();
               setTask(updatedTask);
-              // Powrót do ekranu listy z flagą odświeżenia
               navigation.navigate('TodoList', { refresh: true });
               return;
             }
@@ -93,7 +187,6 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
       const updatedTask = await response.json();
       setTask(updatedTask);
 
-      // Powrót do ekranu listy z flagą odświeżenia
       navigation.navigate('TodoList', { refresh: true });
     } catch (error) {
       console.error('Błąd podczas aktualizacji statusu zadania:', error);
@@ -279,7 +372,6 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
             { backgroundColor: theme.colors.primary },
           ]}
           onPress={() => {
-            // Przejdź do ekranu edycji zadania
             navigation.navigate('EditTask', { task });
           }}
         />
@@ -318,6 +410,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  centeredLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   taskDetailHeader: {
     alignItems: 'center',
