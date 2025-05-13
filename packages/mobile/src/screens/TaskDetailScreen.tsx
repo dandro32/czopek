@@ -147,10 +147,16 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
     try {
       setIsLoading(true);
 
+      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+
       const headers = await authHeader();
-      const response = await fetch(`${API_URL}/tasks/${task!.id}/toggle`, {
+      const response = await fetch(`${API_URL}/tasks/${task!.id}`, {
         method: 'PUT',
-        headers: headers,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (!response.ok) {
@@ -162,15 +168,14 @@ export function TaskDetailScreen({ route, navigation }: TaskDetailProps) {
           if (newTokens) {
             const newHeaders = {
               Authorization: `Bearer ${newTokens.access_token}`,
+              'Content-Type': 'application/json',
             };
 
-            const retryResponse = await fetch(
-              `${API_URL}/tasks/${task!.id}/toggle`,
-              {
-                method: 'PUT',
-                headers: newHeaders,
-              }
-            );
+            const retryResponse = await fetch(`${API_URL}/tasks/${task!.id}`, {
+              method: 'PUT',
+              headers: newHeaders,
+              body: JSON.stringify({ status: newStatus }),
+            });
 
             if (retryResponse.ok) {
               const updatedTask = await retryResponse.json();

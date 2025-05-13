@@ -58,6 +58,8 @@ export function TodoListScreen({ navigation, route }: NavigationProps) {
 
   const toggleTaskStatus = async (taskId: string, currentStatus: string) => {
     try {
+      // Używamy serwisu toggleTaskStatusService, który aktualizuje status zadania
+      // poprzez standardowe API PUT /tasks/{id} z nowym statusem
       const updatedTask = await toggleTaskStatusService(taskId, currentStatus);
       // Aktualizacja stanu zadań
       updateTaskInList(updatedTask);
