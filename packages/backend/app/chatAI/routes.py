@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 import openai
 from .models import ChatRequest, ChatResponse
 from app.auth.routes import get_current_user
-from app.auth.models import DBUser
+from app.auth.models import UserInDB
+from typing import Annotated
 
 router = APIRouter()
 
@@ -12,7 +13,10 @@ DEFAULT_SYSTEM_MESSAGE = {
 }
 
 @router.post("", response_model=ChatResponse)
-async def chat_with_gpt(request: ChatRequest, current_user: DBUser = Depends(get_current_user)):
+async def chat_with_gpt(
+    request: ChatRequest, 
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
+):
     try:
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         

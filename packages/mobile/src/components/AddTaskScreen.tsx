@@ -291,13 +291,8 @@ export function AddTaskScreen({ navigation, route }: Props) {
       {
         text: 'OK',
         onPress: () => {
-          if (isEditMode) {
-            // Wróć do szczegółów zadania z zaktualizowanymi danymi
-            navigation.navigate('TaskDetail', { task: data.task });
-          } else {
-            // Wróć do listy zadań po dodaniu
-            navigation.navigate('TodoList');
-          }
+          // Po edycji lub dodaniu zadania przekieruj na listę zadań z flagą refresh=true
+          navigation.navigate('TodoList', { refresh: true });
         },
       },
     ]);
