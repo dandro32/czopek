@@ -1,6 +1,7 @@
-from sqlalchemy.orm import Session
-from .models import DBTask, TaskCreate, TaskList
-from app.auth.models import DBUser
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.database import Database
+from .models import TaskCreate, TaskList
+from bson import ObjectId
 from app.calendar.models import CalendarCredentials
 from app.calendar.service import get_calendar_service, get_upcoming_events
 from datetime import datetime, timedelta
@@ -10,67 +11,62 @@ from typing import List, Tuple, Dict
 
 logger = logging.getLogger(__name__)
 
-def create_task(db: Session, task: TaskCreate, user: DBUser):
-    logger.info(f"Tworzenie nowego zadania dla użytkownika {user.id}")
-    db_task = DBTask(
-        title=task.title,
-        description=task.description,
-        due_date=task.due_date,
-        priority=task.priority,
-        user_id=user.id,
-        source=task.source,
-        calendar_event_id=task.calendar_event_id,
-        status=task.status
-    )
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-    logger.info(f"Utworzono zadanie {db_task.id}")
-    return db_task
+async def create_task(db: AsyncIOMotorDatabase, task: TaskCreate, user_id: ObjectId):
+    logger.info(f"Tworzenie nowego zadania dla użytkownika {user_id}")
+    task_data = task.dict()
+    task_data["user_id"] = user_id
+    
+    result = await db.tasks.insert_one(task_data)
+    
+    logger.info(f"Utworzono zadanie {result.inserted_id}")
+    task_data["_id"] = result.inserted_id
+    return task_data
 
-def get_user_tasks(db: Session, user: DBUser) -> List[DBTask]:
-    logger.info(f"Pobieranie zadań dla użytkownika {user.id}")
-    tasks = db.query(DBTask).filter(DBTask.user_id == user.id).order_by(DBTask.due_date.asc()).all()
+async def get_user_tasks(db: AsyncIOMotorDatabase, user_id: ObjectId) -> List[dict]:
+    logger.info(f"Pobieranie zadań dla użytkownika {user_id}")
+    cursor = db.tasks.find({"user_id": user_id}).sort("due_date", 1)
+    tasks = await cursor.to_list(length=None)
     logger.info(f"Znaleziono {len(tasks)} zadań")
     return tasks
 
-def get_task(db: Session, task_id: int, user: DBUser):
-    return db.query(DBTask).filter(DBTask.id == task_id, DBTask.user_id == user.id).first()
+async def get_task(db: AsyncIOMotorDatabase, task_id: ObjectId, user_id: ObjectId):
+    return await db.tasks.find_one({"_id": task_id, "user_id": user_id})
 
-def update_task(db: Session, task_id: int, task: TaskCreate, user: DBUser):
-    db_task = get_task(db, task_id, user)
-    if db_task:
-        for key, value in task.dict(exclude_unset=True).items():
-            setattr(db_task, key, value)
-        db.commit()
-        db.refresh(db_task)
-    return db_task
+async def update_task(db: AsyncIOMotorDatabase, task_id: ObjectId, task: TaskCreate, user_id: ObjectId):
+    task_data = {k: v for k, v in task.dict(exclude_unset=True).items()}
+    result = await db.tasks.update_one(
+        {"_id": task_id, "user_id": user_id},
+        {"$set": task_data}
+    )
+    
+    if result.modified_count > 0:
+        return await get_task(db, task_id, user_id)
+    return None
 
-def delete_task(db: Session, task_id: int, user: DBUser):
-    db_task = get_task(db, task_id, user)
-    if db_task:
-        db.delete(db_task)
-        db.commit()
-    return db_task
+async def delete_task(db: AsyncIOMotorDatabase, task_id: ObjectId, user_id: ObjectId):
+    task = await get_task(db, task_id, user_id)
+    if task:
+        await db.tasks.delete_one({"_id": task_id, "user_id": user_id})
+    return task
 
-def import_calendar_events(db: Session, user: DBUser) -> Tuple[List[DBTask], bool]:
-    logger.info(f"Próba importu wydarzeń z kalendarza dla użytkownika {user.id}")
-    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == user.id).first()
+async def import_calendar_events(db: AsyncIOMotorDatabase, user_id: ObjectId) -> Tuple[List[dict], bool]:
+    logger.info(f"Próba importu wydarzeń z kalendarza dla użytkownika {user_id}")
+    creds = await db.calendar_credentials.find_one({"user_id": user_id})
     if not creds:
-        logger.warning(f"Brak poświadczeń kalendarza dla użytkownika {user.id}")
-        tasks = get_user_tasks(db, user)
+        logger.warning(f"Brak poświadczeń kalendarza dla użytkownika {user_id}")
+        tasks = await get_user_tasks(db, user_id)
         return tasks, False
     
     logger.info("Znaleziono poświadczenia kalendarza, tworzenie serwisu")
     try:
         service = get_calendar_service({
-            'token': creds.token,
-            'refresh_token': creds.refresh_token,
+            'token': creds["token"],
+            'refresh_token': creds["refresh_token"],
             'token_uri': 'https://oauth2.googleapis.com/token',
             'client_id': os.getenv("GOOGLE_CLIENT_ID"),
             'client_secret': os.getenv("GOOGLE_CLIENT_SECRET"),
             'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
-            'expiry': creds.token_expiry.isoformat()
+            'expiry': creds["token_expiry"].isoformat() if isinstance(creds["token_expiry"], datetime) else creds["token_expiry"]
         })
         
         logger.info("Pobieranie wydarzeń z kalendarza")
@@ -79,10 +75,10 @@ def import_calendar_events(db: Session, user: DBUser) -> Tuple[List[DBTask], boo
         
         for event in calendar_events:
             logger.info(f"Przetwarzanie wydarzenia {event.id}")
-            existing_task = db.query(DBTask).filter(
-                DBTask.calendar_event_id == event.id,
-                DBTask.user_id == user.id
-            ).first()
+            existing_task = await db.tasks.find_one({
+                "calendar_event_id": event.id,
+                "user_id": user_id
+            })
             
             if not existing_task:
                 logger.info(f"Tworzenie nowego zadania z wydarzenia {event.id}")
@@ -95,11 +91,11 @@ def import_calendar_events(db: Session, user: DBUser) -> Tuple[List[DBTask], boo
                     calendar_event_id=event.id,
                     status="pending"
                 )
-                create_task(db, task, user)
+                await create_task(db, task, user_id)
             else:
                 logger.info(f"Zadanie dla wydarzenia {event.id} już istnieje")
         
-        tasks = get_user_tasks(db, user)
+        tasks = await get_user_tasks(db, user_id)
         logger.info(f"Zakończono import z kalendarza, znaleziono łącznie {len(tasks)} zadań")
         return tasks, True
         
@@ -107,7 +103,7 @@ def import_calendar_events(db: Session, user: DBUser) -> Tuple[List[DBTask], boo
         logger.error(f"Błąd podczas importu z kalendarza: {str(e)}")
         raise
 
-def group_tasks_by_date(tasks: List[DBTask]) -> Dict[str, List[DBTask]]:
+def group_tasks_by_date(tasks: List[dict]) -> Dict[str, List[dict]]:
     today = datetime.now().date()
     grouped_tasks = {
         "overdue": [],
@@ -119,11 +115,15 @@ def group_tasks_by_date(tasks: List[DBTask]) -> Dict[str, List[DBTask]]:
     }
 
     for task in tasks:
-        if not task.due_date:
+        due_date = task.get("due_date")
+        if not due_date:
             grouped_tasks["no_date"].append(task)
             continue
 
-        task_date = task.due_date.date()
+        if isinstance(due_date, str):
+            due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+        
+        task_date = due_date.date()
         
         if task_date < today:
             grouped_tasks["overdue"].append(task)
@@ -138,9 +138,9 @@ def group_tasks_by_date(tasks: List[DBTask]) -> Dict[str, List[DBTask]]:
 
     return grouped_tasks
 
-def get_task_statistics(tasks: List[DBTask]) -> dict:
+def get_task_statistics(tasks: List[dict]) -> dict:
     total_count = len(tasks)
-    completed_count = sum(1 for task in tasks if task.status == "completed")
+    completed_count = sum(1 for task in tasks if task.get("status") == "completed")
     pending_count = total_count - completed_count
     
     return {
@@ -149,18 +149,31 @@ def get_task_statistics(tasks: List[DBTask]) -> dict:
         "completed_count": completed_count
     }
 
-def get_tasks_with_stats(db: Session, user: DBUser) -> TaskList:
-    logger.info(f"Pobieranie zadań ze statystykami dla użytkownika {user.id}")
+async def get_tasks_with_stats(db: AsyncIOMotorDatabase, user_id: ObjectId) -> TaskList:
+    logger.info(f"Pobieranie zadań ze statystykami dla użytkownika {user_id}")
     try:
-        tasks, calendar_imported = import_calendar_events(db, user)
+        tasks, calendar_imported = await import_calendar_events(db, user_id)
         stats = get_task_statistics(tasks)
         
         logger.info(f"Statystyki zadań: {stats}")
         return TaskList(
-            tasks=sorted(tasks, key=lambda x: x.due_date if x.due_date else datetime.max),
+            tasks=sorted(tasks, key=lambda x: x.get("due_date") if x.get("due_date") else datetime.max),
             calendar_imported=calendar_imported,
             **stats
         )
     except Exception as e:
         logger.error(f"Błąd podczas pobierania zadań ze statystykami: {str(e)}")
-        raise 
+        raise
+
+# Wersje synchroniczne dla skryptu migracji i narzędzi administracyjnych
+def sync_create_task(db: Database, task: dict, user_id: ObjectId):
+    task_data = task.copy()
+    task_data["user_id"] = user_id
+    
+    result = db.tasks.insert_one(task_data)
+    
+    task_data["_id"] = result.inserted_id
+    return task_data
+
+def sync_get_user_tasks(db: Database, user_id: ObjectId) -> List[dict]:
+    return list(db.tasks.find({"user_id": user_id}).sort("due_date", 1)) 

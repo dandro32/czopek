@@ -1,17 +1,22 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey
-from database import Base
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List
 from datetime import datetime
+from bson import ObjectId
 
-class DBUser(Base):
-    __tablename__ = "users"
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    username = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -21,11 +26,21 @@ class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
-    id: int
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     is_active: bool = True
 
     class Config:
-        orm_mode = True
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: str
+        }
+        schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "username": "johndoe",
+                "is_active": True
+            }
+        }
 
 class UserInDB(User):
     hashed_password: str
@@ -36,17 +51,6 @@ class UserLogin(BaseModel):
 
 class RefreshToken(BaseModel):
     refresh_token: str
-
-class DBTask(Base):
-    __tablename__ = "tasks"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)
-    description = Column(String)
-    due_at = Column(DateTime)
-    remind_at = Column(DateTime)
-    completed = Column(Boolean, default=False)
-    user_id = Column(Integer, ForeignKey("users.id"))
 
 class TaskBase(BaseModel):
     title: str
@@ -59,8 +63,20 @@ class TaskCreate(TaskBase):
     pass
 
 class Task(TaskBase):
-    id: int
-    user_id: int
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    user_id: PyObjectId
 
     class Config:
-        orm_mode = True 
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: str
+        }
+        schema_extra = {
+            "example": {
+                "title": "Task title",
+                "description": "Task description",
+                "due_at": "2023-12-31T23:59:59",
+                "remind_at": "2023-12-31T12:00:00",
+                "completed": False
+            }
+        } 

@@ -1,24 +1,23 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey
-from database import Base
-from sqlalchemy.orm import relationship
+from bson import ObjectId # For MongoDB Object IDs
 
-class DBTask(Base):
-    __tablename__ = "tasks"
+# Helper for ObjectId serialization and validation
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)
-    description = Column(String, nullable=True)
-    due_date = Column(DateTime, nullable=True)
-    priority = Column(String, default="medium")
-    user_id = Column(Integer, ForeignKey("users.id"))
-    source = Column(String, default="manual")
-    calendar_event_id = Column(String, nullable=True)
-    status = Column(String, default="pending")
-    
-    user = relationship("DBUser", back_populates="tasks")
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
 class TaskBase(BaseModel):
     title: str
@@ -27,21 +26,38 @@ class TaskBase(BaseModel):
     priority: str = "medium"
     source: Optional[str] = "manual"
     calendar_event_id: Optional[str] = None
-    status: str = "pending"
+    status: str = "pending" # e.g., pending, in_progress, completed
+    # user_id will be added in Task model, usually set by the application logic
 
 class TaskCreate(TaskBase):
     pass
 
+class TaskUpdate(TaskBase):
+    title: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    # Allow partial updates
+    class Config:
+        extra = 'forbid' # Or 'ignore' if you want to silently ignore extra fields
+
 class Task(TaskBase):
-    id: int
-    user_id: int
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    user_id: PyObjectId # Reference to the User's ObjectId
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
         orm_mode = True
+        allow_population_by_field_name = True
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: dt.isoformat() # Ensure datetime is ISO string
+        }
 
 class TaskList(BaseModel):
     tasks: List[Task]
-    calendar_imported: bool = False
-    total_count: int = 0
-    pending_count: int = 0
-    completed_count: int = 0 
+    # The following fields might be derived or calculated in the service layer
+    calendar_imported: Optional[bool] = False
+    total_count: Optional[int] = 0
+    pending_count: Optional[int] = 0
+    completed_count: Optional[int] = 0 

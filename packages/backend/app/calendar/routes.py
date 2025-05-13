@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from pymongo.database import Database
 from database import get_db
 from app.auth.routes import get_current_user
-from app.auth.models import DBUser
+from app.auth.models import UserInDB
 from .models import CalendarEvent, CalendarEventCreate, TaskFromEvent, CalendarEventList, CalendarCredentials
 from .service import create_flow, get_calendar_service, save_credentials, get_upcoming_events, create_event, event_to_rag_context
 from app.tasks.models import TaskCreate
 from app.tasks.service import create_task
-from typing import List
+from typing import List, Annotated
 import os
 from datetime import datetime
+from bson import ObjectId
 
 router = APIRouter()
 
@@ -23,29 +24,29 @@ async def auth_calendar():
     return {"authorization_url": authorization_url}
 
 @router.get("/callback")
-async def callback(code: str, state: str, db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
+async def callback(
+    code: str, 
+    state: str, 
+    db: Annotated[Database, Depends(get_db)],
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
+):
     flow = create_flow()
     flow.fetch_token(code=code)
     credentials = flow.credentials
     
-    creds_dict = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes,
-        'expiry': credentials.expiry.isoformat()
-    }
-    
-    save_credentials(db, current_user, creds_dict)
+    await save_credentials(db, current_user, credentials)
     return {"message": "Autoryzacja zakończona pomyślnie"}
 
 @router.get("/events", response_model=CalendarEventList)
-async def get_events(db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
-    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == current_user.id).first()
-    if not creds:
+async def get_events(
+    db: Annotated[Database, Depends(get_db)], 
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
+):
+    creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
+    if not creds_doc:
         raise HTTPException(status_code=401, detail="Brak autoryzacji kalendarza")
+    
+    creds = CalendarCredentials(**creds_doc)
     
     service = get_calendar_service({
         'token': creds.token,
@@ -53,8 +54,7 @@ async def get_events(db: Session = Depends(get_db), current_user: DBUser = Depen
         'token_uri': 'https://oauth2.googleapis.com/token',
         'client_id': os.getenv("GOOGLE_CLIENT_ID"),
         'client_secret': os.getenv("GOOGLE_CLIENT_SECRET"),
-        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
-        'expiry': creds.token_expiry.isoformat()
+        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events']
     })
     
     events = get_upcoming_events(service)
@@ -63,12 +63,14 @@ async def get_events(db: Session = Depends(get_db), current_user: DBUser = Depen
 @router.post("/events", response_model=CalendarEvent)
 async def create_calendar_event(
     event: CalendarEventCreate,
-    db: Session = Depends(get_db),
-    current_user: DBUser = Depends(get_current_user)
+    db: Annotated[Database, Depends(get_db)],
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
-    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == current_user.id).first()
-    if not creds:
+    creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
+    if not creds_doc:
         raise HTTPException(status_code=401, detail="Brak autoryzacji kalendarza")
+    
+    creds = CalendarCredentials(**creds_doc)
     
     service = get_calendar_service({
         'token': creds.token,
@@ -76,8 +78,7 @@ async def create_calendar_event(
         'token_uri': 'https://oauth2.googleapis.com/token',
         'client_id': os.getenv("GOOGLE_CLIENT_ID"),
         'client_secret': os.getenv("GOOGLE_CLIENT_SECRET"),
-        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
-        'expiry': creds.token_expiry.isoformat()
+        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events']
     })
     
     event_data = {
@@ -102,8 +103,8 @@ async def create_calendar_event(
 async def convert_event_to_task(
     event_id: str,
     task_data: TaskFromEvent,
-    db: Session = Depends(get_db),
-    current_user: DBUser = Depends(get_current_user)
+    db: Annotated[Database, Depends(get_db)],
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
 ):
     task = TaskCreate(
         title=task_data.title,
@@ -112,14 +113,19 @@ async def convert_event_to_task(
         priority=task_data.priority
     )
     
-    created_task = create_task(db, task, current_user)
+    created_task = await create_task(db, task, current_user)
     return created_task
 
 @router.get("/events/rag-context")
-async def get_events_rag_context(db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
-    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == current_user.id).first()
-    if not creds:
+async def get_events_rag_context(
+    db: Annotated[Database, Depends(get_db)], 
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
+):
+    creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
+    if not creds_doc:
         raise HTTPException(status_code=401, detail="Brak autoryzacji kalendarza")
+    
+    creds = CalendarCredentials(**creds_doc)
     
     service = get_calendar_service({
         'token': creds.token,
@@ -127,8 +133,7 @@ async def get_events_rag_context(db: Session = Depends(get_db), current_user: DB
         'token_uri': 'https://oauth2.googleapis.com/token',
         'client_id': os.getenv("GOOGLE_CLIENT_ID"),
         'client_secret': os.getenv("GOOGLE_CLIENT_SECRET"),
-        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
-        'expiry': creds.token_expiry.isoformat()
+        'scopes': ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events']
     })
     
     events = get_upcoming_events(service)
@@ -136,9 +141,12 @@ async def get_events_rag_context(db: Session = Depends(get_db), current_user: DB
     return {"context": context}
 
 @router.get("/status")
-async def get_calendar_status(db: Session = Depends(get_db), current_user: DBUser = Depends(get_current_user)):
-    creds = db.query(CalendarCredentials).filter(CalendarCredentials.user_id == current_user.id).first()
+async def get_calendar_status(
+    db: Annotated[Database, Depends(get_db)], 
+    current_user: Annotated[UserInDB, Depends(get_current_user)]
+):
+    creds_doc = await db.calendar_credentials.find_one({"user_id": current_user.id})
+    
     return {
-        "is_authorized": creds is not None,
-        "expiry": creds.token_expiry.isoformat() if creds else None
+        "is_authorized": creds_doc is not None,
     } 
