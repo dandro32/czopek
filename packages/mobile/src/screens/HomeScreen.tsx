@@ -128,6 +128,9 @@ export function HomeScreen({ navigation }: Props) {
         name: 'recording.m4a',
       } as any);
 
+      // Dodanie parametru języka (polski)
+      formData.append('language', 'pl');
+
       const apiUrl = `${API_URL}/whisper/transcribe`;
       console.log(`Wysyłanie nagrania do: ${apiUrl}`);
 
@@ -162,15 +165,48 @@ export function HomeScreen({ navigation }: Props) {
 
           const data = await response.json();
           if (data.text) {
+            console.log('==============================================');
+            console.log('📝 TRANSKRYPCJA WHISPER:');
+            console.log(`Tekst: "${data.text}"`);
+            if (data.segments) {
+              console.log('Segmenty:');
+              data.segments.forEach((segment: any, index: number) => {
+                console.log(
+                  `  Segment ${index + 1}: "${segment.text}" (${
+                    segment.start
+                  }s - ${segment.end}s)`
+                );
+              });
+            }
+            console.log(
+              'Czas przetwarzania:',
+              data.processing_time
+                ? `${data.processing_time.toFixed(2)}s`
+                : 'nieznany'
+            );
+            console.log('Model:', data.model || 'nieznany');
+            console.log('Język:', data.language || 'nieznany');
+            console.log('==============================================');
+
             setPrompt(data.text);
             success = true;
           } else if (data.error) {
+            console.log('❌ BŁĄD TRANSKRYPCJI WHISPER:');
+            console.log(`Komunikat błędu: ${data.error}`);
+            if (data.details) {
+              console.log('Szczegóły błędu:', data.details);
+            }
+            console.log('==============================================');
             throw new Error(data.error);
           }
 
           break; // Wyjdź z pętli jeśli nie ma błędów
         } catch (error) {
           console.error(`Próba ${4 - retries}/3 nieudana:`, error);
+          console.log(`⚠️ PONOWNA PRÓBA WYSŁANIA NAGRANIA (${4 - retries}/3)`);
+          console.log(`Audio URI: ${audioUri.substring(0, 50)}...`);
+          console.log(`Endpoint API: ${apiUrl}`);
+          console.log('==============================================');
           lastError = error;
           retries--;
 
