@@ -11,6 +11,7 @@ import {
   API_URL,
   getToken,
 } from '../services/auth';
+import WakeWordDetector from '../components/screen/WakeWordDetector';
 
 type Props = {
   navigation: any;
@@ -283,16 +284,22 @@ export function HomeScreen({ navigation }: Props) {
     }
   };
 
+  // Dodaj obsługę transkrypcji z WakeWordDetector
+  const handleWakeWordTranscription = (transcription: string) => {
+    console.log('Otrzymano transkrypcję z wake word detection:', transcription);
+    setPrompt(transcription);
+
+    // Opcjonalnie: automatycznie wyślij wiadomość po otrzymaniu transkrypcji
+    // handleSendMessage();
+  };
+
   return (
     <View
-      style={[
-        styles.container,
-        {
-          backgroundColor:
-            theme.mode === 'dark' ? theme.colors.black : theme.colors.white,
-        },
-      ]}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
+      {/* Dodajemy WakeWordDetector jako niewidoczny komponent */}
+      <WakeWordDetector onTranscriptionReceived={handleWakeWordTranscription} />
+
       <View
         style={[
           styles.userInfoContainer,
