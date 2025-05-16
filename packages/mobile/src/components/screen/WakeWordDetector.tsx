@@ -5,7 +5,6 @@ import {
   PorcupineErrors,
 } from '@picovoice/porcupine-react-native';
 import SimpleRecordingModal from './SimpleRecordingModal';
-import { PICOVOICE_API_KEY } from '../../config/apiKeys';
 
 /**
  * INSTRUKCJE:
@@ -20,7 +19,7 @@ import { PICOVOICE_API_KEY } from '../../config/apiKeys';
  */
 
 // Używamy klucza z konfiguracji
-const ACCESS_KEY = PICOVOICE_API_KEY;
+const ACCESS_KEY = 'LHAK4HBC7E2NuG3DC7KaCTOjJJZyZSqu4OjONvMFvX6fOOoVNAa4MA==';
 
 console.log(
   'WakeWordDetector: Używam klucza Picovoice API z config/apiKeys.ts'
